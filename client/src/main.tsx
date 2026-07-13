@@ -1,5 +1,5 @@
-import React from 'react';
-import ReactDOM from 'react-dom/client';
+import { StrictMode } from 'react';
+import { createRoot } from 'react-dom/client';
 import { BrowserRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Toaster } from 'react-hot-toast';
@@ -14,44 +14,35 @@ const queryClient = new QueryClient({
     queries: {
       staleTime: 30 * 1000, // 30 seconds
       retry: 2,
-      refetchOnWindowFocus: false,
+      refetchOnWindowFocus: true,
     },
   },
 });
 
-ReactDOM.createRoot(document.getElementById('root')!).render(
-  <React.StrictMode>
+createRoot(document.getElementById('root')!).render(
+  <StrictMode>
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
         <ThemeProvider>
-          <AuthProvider>
-            <OfflineProvider>
+          <OfflineProvider>
+            <AuthProvider>
               <App />
               <Toaster
                 position="top-center"
                 toastOptions={{
-                  duration: 3000,
+                  duration: 2500,
                   style: {
                     borderRadius: '16px',
-                    padding: '12px 16px',
+                    background: '#1f2937',
+                    color: '#f9fafb',
                     fontSize: '14px',
-                    fontWeight: '500',
                   },
                 }}
               />
-            </OfflineProvider>
-          </AuthProvider>
+            </AuthProvider>
+          </OfflineProvider>
         </ThemeProvider>
       </BrowserRouter>
     </QueryClientProvider>
-  </React.StrictMode>
+  </StrictMode>
 );
-
-// Register service worker for PWA
-if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/sw.js').catch(() => {
-      // SW registration failed silently
-    });
-  });
-}

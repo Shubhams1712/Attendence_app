@@ -5,7 +5,13 @@ import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Tabs } from '@/components/ui/Tabs';
 import { Select } from '@/components/ui/Select';
+import { useStudents } from '@/hooks/useStudents';
+import { supabase } from '@/lib/supabase';
+import { exportToPDF, exportToExcel, exportToCSV } from '@/lib/share';
 import toast from 'react-hot-toast';
+import type { Student, AttendanceRecord } from '@/types';
+
+const DEFAULT_CLASS_ID = '1';
 
 const reportTypes = [
   { id: 'daily', label: 'Daily', icon: <Calendar size={14} /> },
@@ -23,9 +29,67 @@ const exportFormats = [
 
 export function ReportsPage() {
   const [activeReport, setActiveReport] = useState('daily');
+  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0] || '');
+  const [selectedSubject, setSelectedSubject] = useState('all');
+  const [isGenerating, setIsGenerating] = useState(false);
 
-  const handleExport = (format: string) => {
-    toast.success(`Generating ${format.toUpperCase()} report...`);
+  const { data: students = [] } = useStudents(DEFAULT_CLASS_ID);
+
+  const handleExport = async (format: string) => {
+    setIsGenerating(true);
+    try {
+      // Fetch attendance records for the selected date
+      const { data: records } = await supabase
+        .from('attendance_records')
+        .select('*, students:student_id (full_name, roll_number, gender)')
+        .eq('date', selectedDate)
+        .eq('students.class_id', DEFAULT_CLASS_ID);
+
+      if (!records || records.length === 0) {
+        toast.error('No attendance records found for this date');
+        setIsGenerating(false);
+        return;
+      }
+
+      const shareData = {
+        className: 'BSc IT Third Year',
+        subject: selectedSubject === 'all' ? 'All Subjects' : selectedSubject,
+        teacher: 'Teacher',
+        date: selectedDate,
+        records: records.map((r) => ({
+          student: r.students as unknown as Student,
+          status: r.status as 'present' | 'absent' | 'leave' | 'unmarked',
+        })),
+        summary: {
+          date: selectedDate,
+          subject_id: selectedSubject,
+          total_students: students.length,
+          present: records.filter((r) => r.status === 'present').length,
+          absent: records.filter((r) => r.status === 'absent').length,
+          leave: records.filter((r) => r.status === 'leave').length,
+          unmarked: students.length - records.length,
+          percentage: students.length > 0
+            ? Math.round((records.filter((r) => r.status === 'present').length / students.length) * 100)
+            : 0,
+        },
+      };
+
+      const filename = `attendance-${selectedDate}`;
+
+      if (format === 'pdf') {
+        await exportToPDF(shareData, filename);
+      } else if (format === 'excel') {
+        exportToExcel(shareData, filename);
+      } else if (format === 'csv') {
+        exportToCSV(shareData, filename);
+      }
+
+      toast.success(`${format.toUpperCase()} report downloaded!`);
+    } catch {
+      toast.error('Failed to generate report');
+    } finally {
+      setIsGenerating(false);
+    }
   };
 
   return (
@@ -41,25 +105,21 @@ export function ReportsPage() {
 
       {/* Filters */}
       <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className="space-y-3 mb-4">
+        <div>
+          <label className="label">Date</label>
+          <input
+            type="date"
+            value={selectedDate}
+            onChange={(e) => setSelectedDate(e.target.value)}
+            className="input"
+          />
+        </div>
         <Select
           label="Subject"
-          value=""
-          onChange={() => {}}
+          value={selectedSubject}
+          onChange={setSelectedSubject}
           options={[
             { value: 'all', label: 'All Subjects' },
-            { value: '1', label: 'Data Structures' },
-            { value: '2', label: 'Operating Systems' },
-            { value: '3', label: 'Database Management' },
-          ]}
-        />
-        <Select
-          label="Teacher"
-          value=""
-          onChange={() => {}}
-          options={[
-            { value: 'all', label: 'All Teachers' },
-            { value: '1', label: 'Dr. Smith' },
-            { value: '2', label: 'Prof. Johnson' },
           ]}
         />
       </motion.div>

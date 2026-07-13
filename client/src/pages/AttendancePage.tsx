@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo } from 'react';
+import { useState, useCallback, useMemo, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   CheckCircle,
@@ -15,23 +15,19 @@ import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { SearchInput } from '@/components/ui/SearchInput';
 import { Tabs } from '@/components/ui/Tabs';
-import type { AttendanceStatus, Student } from '@shared/types';
+import { useStudents } from '@/hooks/useStudents';
+import { useMarkAttendance, useBulkMarkAttendance } from '@/hooks/useAttendance';
+import { useCreateSession, useCompleteSession } from '@/hooks/useSessions';
+import { useAuth } from '@/contexts/AuthContext';
+import { useOffline } from '@/contexts/OfflineContext';
+import { supabase } from '@/lib/supabase';
+import type { AttendanceStatus, Student, AttendanceRecord } from '@/types';
 import clsx from 'clsx';
 import toast from 'react-hot-toast';
 
-// Demo students - replace with real data
-const DEMO_STUDENTS: (Student & { attendance: AttendanceStatus })[] = [
-  { id: '1', roll_number: '001', full_name: 'Aarav Patel', gender: 'male', status: 'active', class_id: '1', created_at: '', updated_at: '', attendance: 'unmarked' },
-  { id: '2', roll_number: '002', full_name: 'Priya Sharma', gender: 'female', status: 'active', class_id: '1', created_at: '', updated_at: '', attendance: 'unmarked' },
-  { id: '3', roll_number: '003', full_name: 'Rohan Gupta', gender: 'male', status: 'active', class_id: '1', created_at: '', updated_at: '', attendance: 'unmarked' },
-  { id: '4', roll_number: '004', full_name: 'Ananya Singh', gender: 'female', status: 'active', class_id: '1', created_at: '', updated_at: '', attendance: 'unmarked' },
-  { id: '5', roll_number: '005', full_name: 'Vikram Desai', gender: 'male', status: 'active', class_id: '1', created_at: '', updated_at: '', attendance: 'unmarked' },
-  { id: '6', roll_number: '006', full_name: 'Meera Joshi', gender: 'female', status: 'active', class_id: '1', created_at: '', updated_at: '', attendance: 'unmarked' },
-  { id: '7', roll_number: '007', full_name: 'Arjun Reddy', gender: 'male', status: 'active', class_id: '1', created_at: '', updated_at: '', attendance: 'unmarked' },
-  { id: '8', roll_number: '008', full_name: 'Kavya Nair', gender: 'female', status: 'active', class_id: '1', created_at: '', updated_at: '', attendance: 'unmarked' },
-  { id: '9', roll_number: '009', full_name: 'Aditya Kumar', gender: 'male', status: 'active', class_id: '1', created_at: '', updated_at: '', attendance: 'unmarked' },
-  { id: '10', roll_number: '010', full_name: 'Diya Mehta', gender: 'female', status: 'active', class_id: '1', created_at: '', updated_at: '', attendance: 'unmarked' },
-];
+const DEFAULT_CLASS_ID = '1';
+const DEFAULT_SUBJECT_ID = '1';
+const DEFAULT_TEACHER_ID = '1';
 
 type SortMode = 'roll' | 'name';
 type FilterMode = 'all' | 'present' | 'absent' | 'leave' | 'unmarked';
@@ -44,37 +40,177 @@ const statusConfig: Record<AttendanceStatus, { color: string; bg: string; border
   unmarked: { color: 'text-gray-400', bg: 'bg-gray-50 dark:bg-gray-800', border: 'border-gray-200 dark:border-gray-700', icon: Users },
 };
 
+interface StudentWithAttendance extends Student {
+  attendance: AttendanceStatus;
+}
+
 export function AttendancePage() {
-  const [students, setStudents] = useState(DEMO_STUDENTS);
+  const { user } = useAuth();
+  const { isOnline, saveOffline } = useOffline();
+  const [sessionId, setSessionId] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [sortMode, setSortMode] = useState<SortMode>('roll');
   const [filterMode, setFilterMode] = useState<FilterMode>('all');
   const [tappingId, setTappingId] = useState<string | null>(null);
 
-  const toggleAttendance = useCallback((studentId: string) => {
+  const { data: students = [] } = useStudents(DEFAULT_CLASS_ID);
+  const createSession = useCreateSession();
+  const completeSession = useCompleteSession();
+  const markAttendanceMutation = useMarkAttendance();
+  const bulkMarkAttendance = useBulkMarkAttendance();
+
+  // Build attendance map from existing records
+  const [attendanceMap, setAttendanceMap] = useState<Map<string, AttendanceStatus>>(new Map());
+
+  // Fetch existing records for today's session
+  useEffect(() => {
+    const fetchRecords = async () => {
+      if (!sessionId) return;
+
+      const { data: records } = await supabase
+        .from('attendance_records')
+        .select('student_id, status')
+        .eq('session_id', sessionId);
+
+      if (records) {
+        const map = new Map<string, AttendanceStatus>();
+        records.forEach((r) => map.set(r.student_id, r.status as AttendanceStatus));
+        setAttendanceMap(map);
+      }
+    };
+
+    fetchRecords();
+  }, [sessionId]);
+
+  // Real-time subscription for attendance changes
+  useEffect(() => {
+    if (!sessionId) return;
+
+    const channel = supabase
+      .channel('attendance-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'attendance_records',
+          filter: `session_id=eq.${sessionId}`,
+        },
+        (payload) => {
+          if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
+            const record = payload.new as AttendanceRecord;
+            setAttendanceMap((prev) => {
+              const next = new Map(prev);
+              next.set(record.student_id, record.status);
+              return next;
+            });
+          } else if (payload.eventType === 'DELETE') {
+            const record = payload.old as AttendanceRecord;
+            setAttendanceMap((prev) => {
+              const next = new Map(prev);
+              next.delete(record.student_id);
+              return next;
+            });
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [sessionId]);
+
+  const studentsWithAttendance: StudentWithAttendance[] = useMemo(() => {
+    return students.map((s) => ({
+      ...s,
+      attendance: attendanceMap.get(s.id) || 'unmarked',
+    }));
+  }, [students, attendanceMap]);
+
+  const toggleAttendance = useCallback(async (studentId: string) => {
     setTappingId(studentId);
     setTimeout(() => setTappingId(null), 150);
 
-    setStudents((prev) =>
-      prev.map((s) => {
-        if (s.id !== studentId) return s;
-        const currentIndex = statusCycle.indexOf(s.attendance);
-        const nextIndex = (currentIndex + 1) % statusCycle.length;
-        const nextStatus = statusCycle[nextIndex] as AttendanceStatus;
-        return { ...s, attendance: nextStatus };
-      })
-    );
-  }, []);
+    const currentStatus = attendanceMap.get(studentId) || 'unmarked';
+    const currentIndex = statusCycle.indexOf(currentStatus);
+    const nextIndex = (currentIndex + 1) % statusCycle.length;
+    const nextStatus = statusCycle[nextIndex] as AttendanceStatus;
 
-  const markAll = useCallback((status: AttendanceStatus) => {
-    setStudents((prev) => prev.map((s) => ({ ...s, attendance: status })));
-    toast.success(`Marked all as ${status}`);
-  }, []);
+    setAttendanceMap((prev) => {
+      const next = new Map(prev);
+      next.set(studentId, nextStatus);
+      return next;
+    });
+
+    if (!sessionId || !user) return;
+
+    if (!isOnline) {
+      await saveOffline({
+        session_id: sessionId,
+        student_id: studentId,
+        subject_id: DEFAULT_SUBJECT_ID,
+        date: new Date().toISOString().split('T')[0] || '',
+        status: nextStatus,
+        marked_by: user.id,
+      });
+      return;
+    }
+
+    try {
+      await markAttendanceMutation.mutateAsync({
+        sessionId,
+        studentId,
+        subjectId: DEFAULT_SUBJECT_ID,
+        date: new Date().toISOString().split('T')[0] || '',
+        status: nextStatus,
+        markedBy: user.id,
+      });
+    } catch {
+      toast.error('Failed to save attendance');
+    }
+  }, [attendanceMap, sessionId, user, isOnline, saveOffline, markAttendanceMutation]);
+
+  const markAll = useCallback(async (status: AttendanceStatus) => {
+    const newMap = new Map(attendanceMap);
+    students.forEach((s) => newMap.set(s.id, status));
+    setAttendanceMap(newMap);
+
+    if (!sessionId || !user) return;
+
+    const records = students.map((s) => ({ student_id: s.id, status }));
+
+    if (!isOnline) {
+      for (const record of records) {
+        await saveOffline({
+          session_id: sessionId,
+          student_id: record.student_id,
+          subject_id: DEFAULT_SUBJECT_ID,
+          date: new Date().toISOString().split('T')[0] || '',
+          status: record.status,
+          marked_by: user.id,
+        });
+      }
+      return;
+    }
+
+    try {
+      await bulkMarkAttendance.mutateAsync({
+        sessionId,
+        subjectId: DEFAULT_SUBJECT_ID,
+        date: new Date().toISOString().split('T')[0] || '',
+        records,
+        markedBy: user.id,
+      });
+      toast.success(`Marked all as ${status}`);
+    } catch {
+      toast.error('Failed to mark all attendance');
+    }
+  }, [attendanceMap, students, sessionId, user, isOnline, saveOffline, bulkMarkAttendance]);
 
   const filteredStudents = useMemo(() => {
-    let result = [...students];
+    let result = [...studentsWithAttendance];
 
-    // Search
     if (search) {
       const q = search.toLowerCase();
       result = result.filter(
@@ -82,12 +218,10 @@ export function AttendancePage() {
       );
     }
 
-    // Filter
     if (filterMode !== 'all') {
       result = result.filter((s) => s.attendance === filterMode);
     }
 
-    // Sort
     if (sortMode === 'name') {
       result.sort((a, b) => a.full_name.localeCompare(b.full_name));
     } else {
@@ -95,20 +229,48 @@ export function AttendancePage() {
     }
 
     return result;
-  }, [students, search, sortMode, filterMode]);
+  }, [studentsWithAttendance, search, sortMode, filterMode]);
 
   const summary = useMemo(() => {
-    const present = students.filter((s) => s.attendance === 'present').length;
-    const absent = students.filter((s) => s.attendance === 'absent').length;
-    const leave = students.filter((s) => s.attendance === 'leave').length;
-    const total = students.length;
+    const present = studentsWithAttendance.filter((s) => s.attendance === 'present').length;
+    const absent = studentsWithAttendance.filter((s) => s.attendance === 'absent').length;
+    const leave = studentsWithAttendance.filter((s) => s.attendance === 'leave').length;
+    const total = studentsWithAttendance.length;
     const percentage = total > 0 ? Math.round((present / total) * 100) : 0;
     return { present, absent, leave, total, percentage };
-  }, [students]);
+  }, [studentsWithAttendance]);
 
-  const handleFinish = () => {
-    toast.success('Attendance saved successfully!');
-    // Navigate to summary or history
+  const handleStartSession = async () => {
+    try {
+      const now = new Date();
+      const result = await createSession.mutateAsync({
+        subject_id: DEFAULT_SUBJECT_ID,
+        teacher_id: DEFAULT_TEACHER_ID,
+        date: now.toISOString().split('T')[0] || '',
+        start_time: `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`,
+        end_time: `${String(now.getHours() + 1).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`,
+        class_id: DEFAULT_CLASS_ID,
+        status: 'in_progress',
+        marked_by: user?.id || '',
+      });
+      setSessionId(result.id);
+      toast.success('Session started!');
+    } catch {
+      toast.error('Failed to start session');
+    }
+  };
+
+  const handleFinish = async () => {
+    if (!sessionId) return;
+
+    try {
+      await completeSession.mutateAsync(sessionId);
+      setSessionId(null);
+      setAttendanceMap(new Map());
+      toast.success('Attendance saved successfully!');
+    } catch {
+      toast.error('Failed to complete session');
+    }
   };
 
   return (
@@ -160,7 +322,7 @@ export function AttendancePage() {
         </div>
         <Tabs
           tabs={[
-            { id: 'all', label: `All (${students.length})` },
+            { id: 'all', label: `All (${studentsWithAttendance.length})` },
             { id: 'present', label: `Present (${summary.present})` },
             { id: 'absent', label: `Absent (${summary.absent})` },
             { id: 'leave', label: `Leave (${summary.leave})` },
@@ -249,22 +411,37 @@ export function AttendancePage() {
         className="fixed bottom-16 left-0 right-0 p-4 bg-white/90 dark:bg-gray-900/90 backdrop-blur-xl border-t border-gray-200 dark:border-gray-800 safe-bottom"
       >
         <div className="flex gap-3 max-w-lg mx-auto">
-          <Button
-            variant="secondary"
-            icon={<Share2 size={18} />}
-            className="flex-1"
-            onClick={() => toast.success('Share feature coming soon!')}
-          >
-            Share
-          </Button>
-          <Button
-            variant="primary"
-            icon={<Save size={18} />}
-            className="flex-[2]"
-            onClick={handleFinish}
-          >
-            Finish Attendance
-          </Button>
+          {!sessionId ? (
+            <Button
+              variant="primary"
+              icon={<Save size={18} />}
+              className="flex-1"
+              onClick={handleStartSession}
+              loading={createSession.isPending}
+            >
+              Start Session
+            </Button>
+          ) : (
+            <>
+              <Button
+                variant="secondary"
+                icon={<Share2 size={18} />}
+                className="flex-1"
+                onClick={() => toast.success('Share feature coming soon!')}
+              >
+                Share
+              </Button>
+              <Button
+                variant="primary"
+                icon={<Save size={18} />}
+                className="flex-[2]"
+                onClick={handleFinish}
+                loading={completeSession.isPending}
+              >
+                Finish Attendance
+              </Button>
+            </>
+          )}
         </div>
       </motion.div>
     </div>

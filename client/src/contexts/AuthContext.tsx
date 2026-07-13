@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useState, useCallback } from 'react';
-import type { User, UserRole } from '@shared/types';
+import type { User, UserRole } from '@/types';
 import { supabase } from '@/lib/supabase';
 
 interface AuthContextType {

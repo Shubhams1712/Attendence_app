@@ -1,12 +1,20 @@
-import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
+import { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import { openDB, type IDBPDatabase } from 'idb';
-import type { OfflineRecord } from '@shared/types';
+import { supabase } from '@/lib/supabase';
+import type { AttendanceStatus, OfflineRecord } from '@/types';
 
 interface OfflineContextType {
   isOnline: boolean;
   pendingSync: number;
   syncNow: () => Promise<void>;
-  saveOffline: (record: Omit<OfflineRecord, 'id' | 'timestamp' | 'synced'>) => Promise<void>;
+  saveOffline: (record: {
+    session_id: string;
+    student_id: string;
+    subject_id: string;
+    date: string;
+    status: AttendanceStatus;
+    marked_by: string;
+  }) => Promise<void>;
 }
 
 const OfflineContext = createContext<OfflineContextType | null>(null);
@@ -39,7 +47,6 @@ export function OfflineProvider({ children }: { children: React.ReactNode }) {
     window.addEventListener('online', handleOnline);
     window.addEventListener('offline', handleOffline);
 
-    // Count pending records
     countPending();
 
     return () => {
@@ -65,9 +72,14 @@ export function OfflineProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  const saveOffline = useCallback(async (
-    record: Omit<OfflineRecord, 'id' | 'timestamp' | 'synced'>
-  ) => {
+  const saveOffline = useCallback(async (record: {
+    session_id: string;
+    student_id: string;
+    subject_id: string;
+    date: string;
+    status: AttendanceStatus;
+    marked_by: string;
+  }) => {
     try {
       const db = await getDB();
       await db.add(STORE_NAME, {
@@ -90,14 +102,23 @@ export function OfflineProvider({ children }: { children: React.ReactNode }) {
 
       for (const record of records) {
         try {
-          // Attempt to sync each record to server
-          const response = await fetch(`/api/sync`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(record),
-          });
+          // Try to upsert the attendance record directly to Supabase
+          const { error } = await supabase
+            .from('attendance_records')
+            .upsert(
+              {
+                session_id: record.session_id,
+                student_id: record.student_id,
+                subject_id: record.subject_id,
+                date: record.date,
+                status: record.status,
+                marked_by: record.marked_by,
+                marked_at: record.timestamp,
+              },
+              { onConflict: 'session_id,student_id' }
+            );
 
-          if (response.ok) {
+          if (!error) {
             await tx.store.delete(record.id);
           }
         } catch {
@@ -105,7 +126,7 @@ export function OfflineProvider({ children }: { children: React.ReactNode }) {
         }
       }
 
-      setPendingSync(0);
+      await countPending();
     } catch {
       // Sync failed, will retry later
     }

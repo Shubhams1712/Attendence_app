@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import type { PWAInstallPrompt } from '@shared/types';
+import type { PWAInstallPrompt } from '@/types';
 
 export function usePWAInstall() {
   const [deferredPrompt, setDeferredPrompt] = useState<PWAInstallPrompt | null>(null);

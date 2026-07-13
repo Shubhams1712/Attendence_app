@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import {
   Building2,
@@ -18,6 +18,7 @@ import { Button } from '@/components/ui/Button';
 import { Modal } from '@/components/ui/Modal';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useAuth } from '@/contexts/AuthContext';
+import { supabase } from '@/lib/supabase';
 import toast from 'react-hot-toast';
 
 interface SettingsSection {
@@ -35,28 +36,65 @@ export function SettingsPage() {
   const { theme, setTheme } = useTheme();
   const { user, signOut } = useAuth();
   const [showSubjectModal, setShowSubjectModal] = useState(false);
-  
+  const [subjects, setSubjects] = useState<string[]>([]);
+  const [settings, setSettings] = useState({
+    institute_name: 'ABC College',
+    department: 'Computer Science',
+    academic_year: '2025-2026',
+    notification_reminder_minutes: 10,
+  });
+
+  useEffect(() => {
+    const loadSettings = async () => {
+      const { data } = await supabase
+        .from('settings')
+        .select('*')
+        .limit(1)
+        .single();
+
+      if (data) {
+        setSettings({
+          institute_name: data.institute_name || 'ABC College',
+          department: data.department || 'Computer Science',
+          academic_year: data.academic_year || '2025-2026',
+          notification_reminder_minutes: data.notification_reminder_minutes || 10,
+        });
+      }
+
+      // Load subjects
+      const { data: subjectData } = await supabase
+        .from('subjects')
+        .select('name')
+        .order('name');
+
+      if (subjectData) {
+        setSubjects(subjectData.map((s) => s.name));
+      }
+    };
+
+    loadSettings();
+  }, []);
 
   const sections: SettingsSection[] = [
     {
       title: 'Institute',
       items: [
-        { icon: <Building2 size={20} />, label: 'Institute Name', value: 'ABC College', onClick: () => toast('Edit institute name'), color: 'text-primary-600 bg-primary-50 dark:bg-primary-500/10' },
-        { icon: <BookOpen size={20} />, label: 'Department', value: 'Computer Science', onClick: () => {}, color: 'text-blue-600 bg-blue-50 dark:bg-blue-500/10' },
-        { icon: <Clock size={20} />, label: 'Academic Year', value: '2025-2026', onClick: () => {}, color: 'text-purple-600 bg-purple-50 dark:bg-purple-500/10' },
+        { icon: <Building2 size={20} />, label: 'Institute Name', value: settings.institute_name, onClick: () => toast('Edit institute name'), color: 'text-primary-600 bg-primary-50 dark:bg-primary-500/10' },
+        { icon: <BookOpen size={20} />, label: 'Department', value: settings.department, onClick: () => {}, color: 'text-blue-600 bg-blue-50 dark:bg-blue-500/10' },
+        { icon: <Clock size={20} />, label: 'Academic Year', value: settings.academic_year, onClick: () => {}, color: 'text-purple-600 bg-purple-50 dark:bg-purple-500/10' },
       ],
     },
     {
       title: 'Academics',
       items: [
-        { icon: <BookOpen size={20} />, label: 'Subjects', value: '6 subjects', onClick: () => setShowSubjectModal(true), color: 'text-success-600 bg-success-50 dark:bg-success-500/10' },
+        { icon: <BookOpen size={20} />, label: 'Subjects', value: `${subjects.length} subjects`, onClick: () => setShowSubjectModal(true), color: 'text-success-600 bg-success-50 dark:bg-success-500/10' },
         { icon: <Clock size={20} />, label: 'Lecture Timings', value: 'Customize', onClick: () => toast('Lecture timings'), color: 'text-warning-600 bg-warning-50 dark:bg-warning-500/10' },
       ],
     },
     {
       title: 'Notifications',
       items: [
-        { icon: <Bell size={20} />, label: 'Reminder Before Lecture', value: '10 min', onClick: () => toast('Notification settings'), color: 'text-danger-600 bg-danger-50 dark:bg-danger-500/10' },
+        { icon: <Bell size={20} />, label: 'Reminder Before Lecture', value: `${settings.notification_reminder_minutes} min`, onClick: () => toast('Notification settings'), color: 'text-danger-600 bg-danger-50 dark:bg-danger-500/10' },
       ],
     },
     {
@@ -164,12 +202,16 @@ export function SettingsPage() {
       {/* Subjects Modal */}
       <Modal open={showSubjectModal} onClose={() => setShowSubjectModal(false)} title="Manage Subjects">
         <div className="space-y-3">
-          {['Data Structures', 'Operating Systems', 'Database Management', 'Computer Networks', 'Software Engineering', 'Web Development'].map((sub) => (
-            <div key={sub} className="flex items-center justify-between py-2 border-b border-gray-100 dark:border-gray-800 last:border-0">
-              <span className="text-sm font-medium text-gray-900 dark:text-white">{sub}</span>
-              <button className="text-xs text-danger-500 hover:text-danger-600">Remove</button>
-            </div>
-          ))}
+          {subjects.length === 0 ? (
+            <p className="text-sm text-gray-500 dark:text-gray-400">No subjects added yet</p>
+          ) : (
+            subjects.map((sub) => (
+              <div key={sub} className="flex items-center justify-between py-2 border-b border-gray-100 dark:border-gray-800 last:border-0">
+                <span className="text-sm font-medium text-gray-900 dark:text-white">{sub}</span>
+                <button className="text-xs text-danger-500 hover:text-danger-600">Remove</button>
+              </div>
+            ))
+          )}
           <Button variant="secondary" fullWidth size="sm" onClick={() => toast('Add subject')}>+ Add Subject</Button>
         </div>
       </Modal>

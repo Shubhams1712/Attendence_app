@@ -1,6 +1,6 @@
 import { saveAs } from 'file-saver';
 import * as XLSX from 'xlsx';
-import type { Student, AttendanceStatus, AttendanceSummary } from '@shared/types';
+import type { Student, AttendanceStatus, AttendanceSummary } from '@/types';
 import { format } from 'date-fns';
 
 interface AttendanceRecord {

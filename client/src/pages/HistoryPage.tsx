@@ -1,28 +1,36 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { motion } from 'framer-motion';
 import { Calendar, List, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Card } from '@/components/ui/Card';
 import { Tabs } from '@/components/ui/Tabs';
 import { EmptyState } from '@/components/ui/EmptyState';
-import type { AttendanceSession } from '@shared/types';
+import { useSessionHistory } from '@/hooks/useSessions';
 import { format, subDays, addDays, startOfWeek, endOfWeek, eachDayOfInterval } from 'date-fns';
 import toast from 'react-hot-toast';
+import type { AttendanceSession } from '@/types';
 
-const DEMO_HISTORY: AttendanceSession[] = [
-  { id: '1', subject_id: '1', teacher_id: '1', date: format(new Date(), 'yyyy-MM-dd'), start_time: '10:00', end_time: '11:00', class_id: '1', status: 'completed', marked_by: '1', created_at: '', updated_at: '' },
-  { id: '2', subject_id: '2', teacher_id: '2', date: format(subDays(new Date(), 1), 'yyyy-MM-dd'), start_time: '11:00', end_time: '12:00', class_id: '1', status: 'completed', marked_by: '1', created_at: '', updated_at: '' },
-  { id: '3', subject_id: '3', teacher_id: '1', date: format(subDays(new Date(), 2), 'yyyy-MM-dd'), start_time: '10:00', end_time: '11:00', class_id: '1', status: 'completed', marked_by: '1', created_at: '', updated_at: '' },
-  { id: '4', subject_id: '1', teacher_id: '2', date: format(subDays(new Date(), 3), 'yyyy-MM-dd'), start_time: '10:00', end_time: '11:00', class_id: '1', status: 'completed', marked_by: '1', created_at: '', updated_at: '' },
-];
+const DEFAULT_CLASS_ID = '1';
 
 export function HistoryPage() {
   const [viewMode, setViewMode] = useState<'calendar' | 'list'>('list');
   const [selectedDate, setSelectedDate] = useState(new Date());
-  const [history] = useState(DEMO_HISTORY);
+
+  const startDate = format(startOfWeek(selectedDate, { weekStartsOn: 1 }), 'yyyy-MM-dd');
+  const endDate = format(endOfWeek(selectedDate, { weekStartsOn: 1 }), 'yyyy-MM-dd');
+
+  const { data: history = [], isLoading } = useSessionHistory(DEFAULT_CLASS_ID, 50, 0);
 
   const weekStart = startOfWeek(selectedDate, { weekStartsOn: 1 });
   const weekEnd = endOfWeek(selectedDate, { weekStartsOn: 1 });
   const weekDays = eachDayOfInterval({ start: weekStart, end: weekEnd });
+
+  // Filter sessions for the current week for calendar view
+  const weekSessions = useMemo(() => {
+    return history.filter((session) => {
+      const sessionDate = session.date;
+      return sessionDate >= startDate && sessionDate <= endDate;
+    });
+  }, [history, startDate, endDate]);
 
   return (
     <div className="page-container">
@@ -58,7 +66,7 @@ export function HistoryPage() {
               ))}
               {weekDays.map((day) => {
                 const dateStr = format(day, 'yyyy-MM-dd');
-                const hasRecord = history.some((h) => h.date === dateStr);
+                const hasRecord = weekSessions.some((h) => h.date === dateStr);
                 const isToday = format(new Date(), 'yyyy-MM-dd') === dateStr;
                 return (
                   <button
@@ -80,14 +88,20 @@ export function HistoryPage() {
       )}
 
       <div className="space-y-2">
-        {history.length === 0 ? (
+        {isLoading ? (
+          <div className="space-y-2">
+            {[1, 2, 3].map((i) => (
+              <div key={i} className="h-16 bg-gray-100 dark:bg-gray-800 rounded-2xl animate-pulse" />
+            ))}
+          </div>
+        ) : history.length === 0 ? (
           <EmptyState
             icon={<Calendar size={32} />}
             title="No Records Yet"
             description="Attendance history will appear here"
           />
         ) : (
-          history.map((session, i) => (
+          history.map((session: AttendanceSession, i: number) => (
             <motion.div
               key={session.id}
               initial={{ opacity: 0, y: 10 }}

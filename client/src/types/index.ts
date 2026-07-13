@@ -2,21 +2,65 @@
 // Shared Types for Attendance Management System
 // ============================================================
 
-// --- Supabase Database Types (placeholder) ---
+// --- Supabase Database Types (proper Supabase format) ---
 export interface Database {
   public: {
     Tables: {
-      profiles: { Row: User; Insert: Partial<User>; Update: Partial<User> };
-      students: { Row: Student; Insert: Partial<Student>; Update: Partial<Student> };
-      classes: { Row: Class; Insert: Partial<Class>; Update: Partial<Class> };
-      subjects: { Row: Subject; Insert: Partial<Subject>; Update: Partial<Subject> };
-      teachers: { Row: Teacher; Insert: Partial<Teacher>; Update: Partial<Teacher> };
-      attendance: { Row: AttendanceRecord; Insert: Partial<AttendanceRecord>; Update: Partial<AttendanceRecord> };
-      attendance_sessions: { Row: AttendanceSession; Insert: Partial<AttendanceSession>; Update: Partial<AttendanceSession> };
-      audit_logs: { Row: AuditLog; Insert: Partial<AuditLog>; Update: Partial<AuditLog> };
-      settings: { Row: AppSettings; Insert: Partial<AppSettings>; Update: Partial<AppSettings> };
-      notifications: { Row: Notification; Insert: Partial<Notification>; Update: Partial<Notification> };
-      lecture_timings: { Row: LectureTiming; Insert: Partial<LectureTiming>; Update: Partial<LectureTiming> };
+      profiles: {
+        Row: User;
+        Insert: Omit<User, 'created_at' | 'updated_at'>;
+        Update: Partial<Omit<User, 'id' | 'created_at' | 'updated_at'>>;
+      };
+      students: {
+        Row: Student;
+        Insert: Omit<Student, 'id' | 'created_at' | 'updated_at'>;
+        Update: Partial<Omit<Student, 'id' | 'created_at' | 'updated_at'>>;
+      };
+      classes: {
+        Row: Class;
+        Insert: Omit<Class, 'id' | 'created_at'>;
+        Update: Partial<Omit<Class, 'id' | 'created_at'>>;
+      };
+      subjects: {
+        Row: Subject;
+        Insert: Omit<Subject, 'id' | 'created_at'>;
+        Update: Partial<Omit<Subject, 'id' | 'created_at'>>;
+      };
+      teachers: {
+        Row: Teacher;
+        Insert: Omit<Teacher, 'id' | 'created_at'>;
+        Update: Partial<Omit<Teacher, 'id' | 'created_at'>>;
+      };
+      attendance_records: {
+        Row: AttendanceRecord;
+        Insert: Omit<AttendanceRecord, 'id' | 'created_at' | 'updated_at'>;
+        Update: Partial<Omit<AttendanceRecord, 'id' | 'created_at' | 'updated_at'>>;
+      };
+      attendance_sessions: {
+        Row: AttendanceSession;
+        Insert: Omit<AttendanceSession, 'id' | 'created_at' | 'updated_at'>;
+        Update: Partial<Omit<AttendanceSession, 'id' | 'created_at' | 'updated_at'>>;
+      };
+      audit_logs: {
+        Row: AuditLog;
+        Insert: Omit<AuditLog, 'id' | 'timestamp'>;
+        Update: Partial<Omit<AuditLog, 'id' | 'timestamp'>>;
+      };
+      settings: {
+        Row: AppSettings;
+        Insert: Omit<AppSettings, 'id' | 'created_at' | 'updated_at'>;
+        Update: Partial<Omit<AppSettings, 'id' | 'created_at' | 'updated_at'>>;
+      };
+      notifications: {
+        Row: AppNotification;
+        Insert: Omit<AppNotification, 'id' | 'created_at'>;
+        Update: Partial<Omit<AppNotification, 'id' | 'created_at'>>;
+      };
+      lecture_timings: {
+        Row: LectureTiming;
+        Insert: Omit<LectureTiming, 'id'>;
+        Update: Partial<Omit<LectureTiming, 'id'>>;
+      };
     };
     Views: Record<string, never>;
     Functions: Record<string, never>;
@@ -35,12 +79,6 @@ export interface User {
   avatar_url?: string;
   created_at: string;
   updated_at: string;
-}
-
-export interface AuthSession {
-  user: User;
-  access_token: string;
-  refresh_token: string;
 }
 
 // --- Students ---
@@ -66,7 +104,7 @@ export interface StudentFormData {
   gender: Gender;
   phone?: string;
   email?: string;
-  status: StudentStatus;
+  status?: StudentStatus;
 }
 
 // --- Classes & Subjects ---
@@ -114,6 +152,7 @@ export type AttendanceStatus = 'present' | 'absent' | 'leave' | 'unmarked';
 export interface AttendanceRecord {
   id: string;
   student_id: string;
+  session_id: string;
   subject_id: string;
   date: string;
   status: AttendanceStatus;
@@ -179,7 +218,7 @@ export interface AppSettings {
 }
 
 // --- Notifications ---
-export interface Notification {
+export interface AppNotification {
   id: string;
   user_id: string;
   title: string;
@@ -224,21 +263,6 @@ export interface StudentWiseReport {
   absent: number;
   leave: number;
   percentage: number;
-}
-
-// --- API Responses ---
-export interface ApiResponse<T> {
-  success: boolean;
-  data?: T;
-  error?: string;
-  message?: string;
-}
-
-export interface PaginatedResponse<T> extends ApiResponse<T[]> {
-  total: number;
-  page: number;
-  per_page: number;
-  total_pages: number;
 }
 
 // --- Offline Sync ---

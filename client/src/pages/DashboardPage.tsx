@@ -16,6 +16,9 @@ import { useAuth } from '@/contexts/AuthContext';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { StatSkeleton } from '@/components/ui/Skeleton';
+import { supabase } from '@/lib/supabase';
+import { useStudents } from '@/hooks/useStudents';
+import { useTodaySessions } from '@/hooks/useSessions';
 
 interface DashboardStats {
   totalStudents: number;
@@ -28,12 +31,17 @@ interface DashboardStats {
   lectureTime: string;
 }
 
+// Default class_id - in production this would come from user settings
+const DEFAULT_CLASS_ID = '1';
+
 export function DashboardPage() {
   const { user } = useAuth();
   const navigate = useNavigate();
   const [currentTime, setCurrentTime] = useState(new Date());
   const [stats, setStats] = useState<DashboardStats | null>(null);
-  const [loading, setLoading] = useState(true);
+
+  const { data: students = [] } = useStudents(DEFAULT_CLASS_ID);
+  const { data: todaySessions = [] } = useTodaySessions(DEFAULT_CLASS_ID);
 
   useEffect(() => {
     const timer = setInterval(() => setCurrentTime(new Date()), 1000);
@@ -41,23 +49,50 @@ export function DashboardPage() {
   }, []);
 
   useEffect(() => {
-    // Simulated data load - replace with actual API call
     const loadDashboard = async () => {
-      await new Promise((r) => setTimeout(r, 800));
+      // Get today's session info
+      const currentSession = todaySessions?.[0] as Record<string, unknown> | undefined;
+      const subjectName = (currentSession?.subjects as Record<string, unknown> | undefined)?.name as string || 'No Session';
+
+      // Get attendance for current session
+      let present = 0;
+      let absent = 0;
+      let leave = 0;
+
+      if (currentSession) {
+        const { data: records } = await supabase
+          .from('attendance_records')
+          .select('status')
+          .eq('session_id', currentSession.id);
+
+        if (records) {
+          present = records.filter((r) => r.status === 'present').length;
+          absent = records.filter((r) => r.status === 'absent').length;
+          leave = records.filter((r) => r.status === 'leave').length;
+        }
+      }
+
+      const totalStudents = students.length;
+      const percentage = totalStudents > 0 ? Math.round((present / totalStudents) * 100) : 0;
+
       setStats({
-        totalStudents: 62,
-        present: 58,
-        absent: 3,
-        leave: 1,
-        percentage: 93.5,
-        todaySubject: 'Data Structures',
-        teacherName: 'Dr. Smith',
-        lectureTime: '10:00 AM - 11:00 AM',
+        totalStudents,
+        present,
+        absent,
+        leave,
+        percentage,
+        todaySubject: subjectName,
+        teacherName: user?.full_name || 'Teacher',
+        lectureTime: currentSession
+          ? `${currentSession.start_time} - ${currentSession.end_time}`
+          : 'No lecture scheduled',
       });
-      setLoading(false);
     };
-    loadDashboard();
-  }, []);
+
+    if (students.length > 0) {
+      loadDashboard();
+    }
+  }, [students, todaySessions, user]);
 
   const statCards = stats
     ? [
@@ -95,7 +130,7 @@ export function DashboardPage() {
       </motion.div>
 
       {/* Today's Subject Card */}
-      {loading ? (
+      {!stats ? (
         <StatSkeleton />
       ) : (
         <>
@@ -111,17 +146,17 @@ export function DashboardPage() {
                 </div>
                 <div>
                   <p className="text-sm text-white/70">Today's Subject</p>
-                  <p className="text-lg font-bold text-white">{stats?.todaySubject}</p>
+                  <p className="text-lg font-bold text-white">{stats.todaySubject}</p>
                 </div>
               </div>
               <div className="flex items-center gap-4 text-sm text-white/80">
                 <span className="flex items-center gap-1">
                   <Calendar size={14} />
-                  {stats?.teacherName}
+                  {stats.teacherName}
                 </span>
                 <span className="flex items-center gap-1">
                   <Clock size={14} />
-                  {stats?.lectureTime}
+                  {stats.lectureTime}
                 </span>
               </div>
             </Card>
@@ -168,7 +203,7 @@ export function DashboardPage() {
                 <div>
                   <p className="text-sm text-gray-500 dark:text-gray-400">Attendance</p>
                   <p className="text-xl font-bold text-gray-900 dark:text-white">
-                    {stats?.percentage}%
+                    {stats.percentage}%
                   </p>
                 </div>
               </div>
@@ -176,12 +211,12 @@ export function DashboardPage() {
                 <svg className="w-16 h-16 -rotate-90" viewBox="0 0 36 36">
                   <circle cx="18" cy="18" r="15.915" fill="none" stroke="currentColor" strokeWidth="3" className="text-gray-100 dark:text-gray-800" />
                   <circle cx="18" cy="18" r="15.915" fill="none" stroke="currentColor" strokeWidth="3"
-                    strokeDasharray={`${stats?.percentage || 0} ${100 - (stats?.percentage || 0)}`}
+                    strokeDasharray={`${stats.percentage} ${100 - stats.percentage}`}
                     className="text-primary-600"
                   />
                 </svg>
                 <span className="absolute inset-0 flex items-center justify-center text-xs font-bold text-primary-600">
-                  {stats?.percentage}%
+                  {stats.percentage}%
                 </span>
               </div>
             </Card>

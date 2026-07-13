@@ -17,11 +17,14 @@ import { SearchInput } from '@/components/ui/SearchInput';
 import { Modal } from '@/components/ui/Modal';
 import { EmptyState } from '@/components/ui/EmptyState';
 import { CardSkeleton } from '@/components/ui/Skeleton';
-import type { Student } from '@shared/types';
+import { useStudents, useCreateStudent, useUpdateStudent, useDeleteStudent } from '@/hooks/useStudents';
+import type { StudentFormData } from '@/types';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import toast from 'react-hot-toast';
+
+const DEFAULT_CLASS_ID = '1';
 
 const studentSchema = z.object({
   roll_number: z.string().min(1, 'Roll number is required'),
@@ -33,21 +36,16 @@ const studentSchema = z.object({
 
 type StudentForm = z.infer<typeof studentSchema>;
 
-const DEMO_STUDENTS: Student[] = [
-  { id: '1', roll_number: '001', full_name: 'Aarav Patel', gender: 'male', status: 'active', class_id: '1', created_at: '', updated_at: '' },
-  { id: '2', roll_number: '002', full_name: 'Priya Sharma', gender: 'female', status: 'active', class_id: '1', created_at: '', updated_at: '' },
-  { id: '3', roll_number: '003', full_name: 'Rohan Gupta', gender: 'male', status: 'active', class_id: '1', created_at: '', updated_at: '' },
-  { id: '4', roll_number: '004', full_name: 'Ananya Singh', gender: 'female', status: 'active', class_id: '1', created_at: '', updated_at: '' },
-  { id: '5', roll_number: '005', full_name: 'Vikram Desai', gender: 'male', status: 'active', class_id: '1', created_at: '', updated_at: '' },
-];
-
 export function StudentsPage() {
-  const [students, setStudents] = useState(DEMO_STUDENTS);
   const [search, setSearch] = useState('');
   const [showAddModal, setShowAddModal] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
-  const [editingStudent, setEditingStudent] = useState<Student | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [editingStudent, setEditingStudent] = useState<{ id: string; data: StudentForm } | null>(null);
+
+  const { data: students = [], isLoading } = useStudents(DEFAULT_CLASS_ID);
+  const createStudent = useCreateStudent();
+  const updateStudent = useUpdateStudent();
+  const deleteStudent = useDeleteStudent();
 
   const { register, handleSubmit, reset, formState: { errors } } = useForm<StudentForm>({
     resolver: zodResolver(studentSchema),
@@ -70,8 +68,8 @@ export function StudentsPage() {
     setShowAddModal(true);
   };
 
-  const openEditModal = (student: Student) => {
-    setEditingStudent(student);
+  const openEditModal = (student: typeof students[0]) => {
+    setEditingStudent({ id: student.id, data: { roll_number: student.roll_number, full_name: student.full_name, gender: student.gender, phone: student.phone || '', email: student.email || '' } });
     reset({
       roll_number: student.roll_number,
       full_name: student.full_name,
@@ -82,36 +80,30 @@ export function StudentsPage() {
     setShowAddModal(true);
   };
 
-  const onSubmit = (data: StudentForm) => {
-    if (editingStudent) {
-      setStudents((prev) =>
-        prev.map((s) =>
-          s.id === editingStudent.id ? { ...s, ...data } : s
-        )
-      );
-      toast.success('Student updated!');
-    } else {
-      const newStudent: Student = {
-        id: crypto.randomUUID(),
-        ...data,
-        status: 'active',
-        class_id: '1',
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-        email: data.email || undefined,
-        phone: data.phone || undefined,
-      };
-      setStudents((prev) => [...prev, newStudent]);
-      toast.success('Student added!');
+  const onSubmit = async (data: StudentForm) => {
+    try {
+      if (editingStudent) {
+        await updateStudent.mutateAsync({ id: editingStudent.id, data: { ...data, phone: data.phone || undefined, email: data.email || undefined } });
+        toast.success('Student updated!');
+      } else {
+        await createStudent.mutateAsync({ data: { ...data, status: 'active', phone: data.phone || undefined, email: data.email || undefined }, classId: DEFAULT_CLASS_ID });
+        toast.success('Student added!');
+      }
+      setShowAddModal(false);
+      reset();
+    } catch {
+      toast.error('Operation failed');
     }
-    setShowAddModal(false);
-    reset();
   };
 
-  const deleteStudent = (id: string) => {
+  const handleDelete = async (id: string) => {
     if (confirm('Are you sure you want to delete this student?')) {
-      setStudents((prev) => prev.filter((s) => s.id !== id));
-      toast.success('Student deleted');
+      try {
+        await deleteStudent.mutateAsync(id);
+        toast.success('Student deleted');
+      } catch {
+        toast.error('Failed to delete student');
+      }
     }
   };
 
@@ -143,7 +135,7 @@ export function StudentsPage() {
       </motion.div>
 
       {/* Student List */}
-      {loading ? (
+      {isLoading ? (
         <CardSkeleton count={5} />
       ) : filteredStudents.length === 0 ? (
         <EmptyState
@@ -185,7 +177,7 @@ export function StudentsPage() {
                       <Edit3 size={16} className="text-gray-400" />
                     </button>
                     <button
-                      onClick={() => deleteStudent(student.id)}
+                      onClick={() => handleDelete(student.id)}
                       className="p-2 rounded-xl hover:bg-danger-50 dark:hover:bg-danger-500/10 transition-colors"
                     >
                       <Trash2 size={16} className="text-danger-400" />
@@ -222,7 +214,7 @@ export function StudentsPage() {
             <Button type="button" variant="secondary" className="flex-1" onClick={() => setShowAddModal(false)}>
               Cancel
             </Button>
-            <Button type="submit" className="flex-[2]">
+            <Button type="submit" className="flex-[2]" loading={createStudent.isPending || updateStudent.isPending}>
               {editingStudent ? 'Update' : 'Add Student'}
             </Button>
           </div>

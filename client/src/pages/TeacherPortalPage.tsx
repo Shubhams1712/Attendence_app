@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { Eye, Download, Calendar, BookOpen } from 'lucide-react';
 import { Card } from '@/components/ui/Card';
@@ -6,19 +6,66 @@ import { Button } from '@/components/ui/Button';
 import { SearchInput } from '@/components/ui/SearchInput';
 import { Tabs } from '@/components/ui/Tabs';
 import { EmptyState } from '@/components/ui/EmptyState';
+import { supabase } from '@/lib/supabase';
 import toast from 'react-hot-toast';
 import { format } from 'date-fns';
 
-const DEMO_ATTENDANCE = [
-  { date: format(new Date(), 'yyyy-MM-dd'), subject: 'Data Structures', present: 58, absent: 3, leave: 1, total: 62 },
-  { date: format(new Date(Date.now() - 86400000), 'yyyy-MM-dd'), subject: 'Operating Systems', present: 55, absent: 5, leave: 2, total: 62 },
-  { date: format(new Date(Date.now() - 172800000), 'yyyy-MM-dd'), subject: 'Database Management', present: 60, absent: 1, leave: 1, total: 62 },
-];
+interface AttendanceSummaryRow {
+  date: string;
+  subject: string;
+  present: number;
+  absent: number;
+  leave: number;
+  total: number;
+}
 
 export function TeacherPortalPage() {
   const [search, setSearch] = useState('');
   const [activeTab, setActiveTab] = useState('attendance');
-  const [attendance] = useState(DEMO_ATTENDANCE);
+  const [attendance, setAttendance] = useState<AttendanceSummaryRow[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  // Fetch attendance summaries
+  useEffect(() => {
+    const fetchData = async () => {
+      setLoading(true);
+      try {
+        const { data: sessions } = await supabase
+          .from('attendance_sessions')
+          .select('*')
+          .eq('status', 'completed')
+          .order('date', { ascending: false })
+          .limit(30);
+
+        if (sessions) {
+          const summaries: AttendanceSummaryRow[] = [];
+          for (const session of sessions) {
+            const { data: records } = await supabase
+              .from('attendance_records')
+              .select('status')
+              .eq('session_id', session.id);
+
+            if (records) {
+              summaries.push({
+                date: session.date,
+                subject: 'Unknown',
+                present: records.filter((r) => r.status === 'present').length,
+                absent: records.filter((r) => r.status === 'absent').length,
+                leave: records.filter((r) => r.status === 'leave').length,
+                total: records.length,
+              });
+            }
+          }
+          setAttendance(summaries);
+        }
+      } catch {
+        // Use empty data
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchData();
+  }, []);
 
   const filteredAttendance = useMemo(() => {
     if (!search) return attendance;
@@ -57,7 +104,13 @@ export function TeacherPortalPage() {
 
       {activeTab === 'attendance' ? (
         <div className="space-y-2">
-          {filteredAttendance.length === 0 ? (
+          {loading ? (
+            <div className="space-y-2">
+              {[1, 2, 3].map((i) => (
+                <div key={i} className="h-24 bg-gray-100 dark:bg-gray-800 rounded-2xl animate-pulse" />
+              ))}
+            </div>
+          ) : filteredAttendance.length === 0 ? (
             <EmptyState
               icon={<Calendar size={32} />}
               title="No Records"
@@ -65,7 +118,7 @@ export function TeacherPortalPage() {
             />
           ) : (
             filteredAttendance.map((record, i) => {
-              const percentage = Math.round((record.present / record.total) * 100);
+              const percentage = record.total > 0 ? Math.round((record.present / record.total) * 100) : 0;
               return (
                 <motion.div
                   key={`${record.date}-${record.subject}`}

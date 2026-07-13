@@ -1,39 +1,140 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { TrendingUp, BarChart3, Award, AlertTriangle } from 'lucide-react';
 import { Card } from '@/components/ui/Card';
 import { Tabs } from '@/components/ui/Tabs';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
+import { supabase } from '@/lib/supabase';
+import { format, subMonths, startOfMonth, endOfMonth } from 'date-fns';
+import type { Student } from '@/types';
 
-const monthlyData = [
-  { month: 'Jan', attendance: 92 },
-  { month: 'Feb', attendance: 88 },
-  { month: 'Mar', attendance: 95 },
-  { month: 'Apr', attendance: 90 },
-  { month: 'May', attendance: 87 },
-  { month: 'Jun', attendance: 93 },
-];
+const DEFAULT_CLASS_ID = '1';
 
-const pieData = [
-  { name: 'Present', value: 58, color: '#22c55e' },
-  { name: 'Absent', value: 3, color: '#ef4444' },
-  { name: 'Leave', value: 1, color: '#f59e0b' },
-];
+interface StudentStats {
+  name: string;
+  percentage: number;
+  total: number;
+  present: number;
+}
 
-const topStudents = [
-  { name: 'Aarav Patel', percentage: 98 },
-  { name: 'Priya Sharma', percentage: 96 },
-  { name: 'Rohan Gupta', percentage: 95 },
-];
+interface MonthlyData {
+  month: string;
+  attendance: number;
+}
 
-const lowStudents = [
-  { name: 'Vikram Desai', percentage: 65 },
-  { name: 'Meera Joshi', percentage: 72 },
-  { name: 'Arjun Reddy', percentage: 75 },
-];
+const COLORS = ['#22c55e', '#ef4444', '#f59e0b'];
 
 export function AnalyticsPage() {
   const [activeTab, setActiveTab] = useState('overview');
+  const [monthlyData, setMonthlyData] = useState<MonthlyData[]>([]);
+  const [pieData, setPieData] = useState([
+    { name: 'Present', value: 0, color: '#22c55e' },
+    { name: 'Absent', value: 0, color: '#ef4444' },
+    { name: 'Leave', value: 0, color: '#f59e0b' },
+  ]);
+  const [topStudents, setTopStudents] = useState<StudentStats[]>([]);
+  const [lowStudents, setLowStudents] = useState<StudentStats[]>([]);
+  const [totalClasses, setTotalClasses] = useState(0);
+  const [avgAttendance, setAvgAttendance] = useState(0);
+
+  useEffect(() => {
+    const loadAnalytics = async () => {
+      // Get all students
+      const { data: students } = await supabase
+        .from('students')
+        .select('*')
+        .eq('class_id', DEFAULT_CLASS_ID);
+
+      if (!students || students.length === 0) return;
+
+      // Get all attendance records for the last 6 months
+      const sixMonthsAgo = format(subMonths(new Date(), 6), 'yyyy-MM-dd');
+
+      const { data: records } = await supabase
+        .from('attendance_records')
+        .select('*')
+        .eq('students.class_id', DEFAULT_CLASS_ID)
+        .gte('date', sixMonthsAgo);
+
+      // Calculate monthly data
+      const monthlyMap = new Map<string, { present: number; total: number }>();
+      for (let i = 5; i >= 0; i--) {
+        const monthDate = subMonths(new Date(), i);
+        const monthKey = format(monthDate, 'MMM');
+        monthlyMap.set(monthKey, { present: 0, total: 0 });
+      }
+
+      // Calculate per-student stats
+      const studentStatsMap = new Map<string, { total: number; present: number; name: string }>();
+
+      let totalPresent = 0;
+      let totalAbsent = 0;
+      let totalLeave = 0;
+
+      if (records) {
+        for (const record of records) {
+          const monthKey = format(new Date(record.date), 'MMM');
+          const monthStats = monthlyMap.get(monthKey);
+          if (monthStats) {
+            monthStats.total++;
+            if (record.status === 'present') monthStats.present++;
+          }
+
+          if (!studentStatsMap.has(record.student_id)) {
+            const student = students.find((s) => s.id === record.student_id);
+            studentStatsMap.set(record.student_id, {
+              total: 0,
+              present: 0,
+              name: student?.full_name || 'Unknown',
+            });
+          }
+          const stats = studentStatsMap.get(record.student_id)!;
+          stats.total++;
+          if (record.status === 'present') stats.present++;
+
+          if (record.status === 'present') totalPresent++;
+          else if (record.status === 'absent') totalAbsent++;
+          else if (record.status === 'leave') totalLeave++;
+        }
+      }
+
+      // Set monthly data
+      const monthlyArray = Array.from(monthlyMap.entries()).map(([month, stats]) => ({
+        month,
+        attendance: stats.total > 0 ? Math.round((stats.present / stats.total) * 100) : 0,
+      }));
+      setMonthlyData(monthlyArray);
+
+      // Set pie data
+      const totalRecords = totalPresent + totalAbsent + totalLeave;
+      if (totalRecords > 0) {
+        setPieData([
+          { name: 'Present', value: totalPresent, color: '#22c55e' },
+          { name: 'Absent', value: totalAbsent, color: '#ef4444' },
+          { name: 'Leave', value: totalLeave, color: '#f59e0b' },
+        ]);
+      }
+
+      // Calculate student percentages
+      const studentStatsArray: StudentStats[] = Array.from(studentStatsMap.values())
+        .map((s) => ({
+          name: s.name,
+          percentage: s.total > 0 ? Math.round((s.present / s.total) * 100) : 0,
+          total: s.total,
+          present: s.present,
+        }))
+        .sort((a, b) => b.percentage - a.percentage);
+
+      setTopStudents(studentStatsArray.slice(0, 5));
+      setLowStudents(studentStatsArray.slice(-5).reverse());
+
+      // Calculate totals
+      setTotalClasses(totalRecords);
+      setAvgAttendance(totalRecords > 0 ? Math.round((totalPresent / totalRecords) * 100) : 0);
+    };
+
+    loadAnalytics();
+  }, []);
 
   return (
     <div className="page-container">
@@ -58,14 +159,14 @@ export function AnalyticsPage() {
                 <TrendingUp size={16} className="text-success-600" />
                 <span className="text-xs text-gray-500">Avg Attendance</span>
               </div>
-              <p className="text-2xl font-bold text-gray-900 dark:text-white">91%</p>
+              <p className="text-2xl font-bold text-gray-900 dark:text-white">{avgAttendance}%</p>
             </Card>
             <Card>
               <div className="flex items-center gap-2 mb-1">
                 <BarChart3 size={16} className="text-primary-600" />
-                <span className="text-xs text-gray-500">Total Classes</span>
+                <span className="text-xs text-gray-500">Total Records</span>
               </div>
-              <p className="text-2xl font-bold text-gray-900 dark:text-white">48</p>
+              <p className="text-2xl font-bold text-gray-900 dark:text-white">{totalClasses}</p>
             </Card>
           </motion.div>
 
@@ -125,18 +226,22 @@ export function AnalyticsPage() {
                 <h3 className="font-bold text-gray-900 dark:text-white text-sm">Most Present</h3>
               </div>
               <div className="space-y-2">
-                {topStudents.map((s, i) => (
-                  <div key={s.name} className="flex items-center gap-3">
-                    <span className="text-lg font-bold text-gray-400 w-6">{i + 1}</span>
-                    <div className="flex-1">
-                      <p className="text-sm font-medium text-gray-900 dark:text-white">{s.name}</p>
-                      <div className="w-full h-1.5 bg-gray-100 dark:bg-gray-800 rounded-full mt-1">
-                        <div className="h-full bg-success-500 rounded-full" style={{ width: `${s.percentage}%` }} />
+                {topStudents.length === 0 ? (
+                  <p className="text-sm text-gray-500 dark:text-gray-400">No data available</p>
+                ) : (
+                  topStudents.map((s, i) => (
+                    <div key={s.name} className="flex items-center gap-3">
+                      <span className="text-lg font-bold text-gray-400 w-6">{i + 1}</span>
+                      <div className="flex-1">
+                        <p className="text-sm font-medium text-gray-900 dark:text-white">{s.name}</p>
+                        <div className="w-full h-1.5 bg-gray-100 dark:bg-gray-800 rounded-full mt-1">
+                          <div className="h-full bg-success-500 rounded-full" style={{ width: `${s.percentage}%` }} />
+                        </div>
                       </div>
+                      <span className="text-sm font-bold text-success-600">{s.percentage}%</span>
                     </div>
-                    <span className="text-sm font-bold text-success-600">{s.percentage}%</span>
-                  </div>
-                ))}
+                  ))
+                )}
               </div>
             </Card>
           </motion.div>
@@ -149,18 +254,22 @@ export function AnalyticsPage() {
                 <h3 className="font-bold text-gray-900 dark:text-white text-sm">Lowest Attendance</h3>
               </div>
               <div className="space-y-2">
-                {lowStudents.map((s, i) => (
-                  <div key={s.name} className="flex items-center gap-3">
-                    <span className="text-lg font-bold text-gray-400 w-6">{i + 1}</span>
-                    <div className="flex-1">
-                      <p className="text-sm font-medium text-gray-900 dark:text-white">{s.name}</p>
-                      <div className="w-full h-1.5 bg-gray-100 dark:bg-gray-800 rounded-full mt-1">
-                        <div className="h-full bg-danger-500 rounded-full" style={{ width: `${s.percentage}%` }} />
+                {lowStudents.length === 0 ? (
+                  <p className="text-sm text-gray-500 dark:text-gray-400">No data available</p>
+                ) : (
+                  lowStudents.map((s, i) => (
+                    <div key={s.name} className="flex items-center gap-3">
+                      <span className="text-lg font-bold text-gray-400 w-6">{i + 1}</span>
+                      <div className="flex-1">
+                        <p className="text-sm font-medium text-gray-900 dark:text-white">{s.name}</p>
+                        <div className="w-full h-1.5 bg-gray-100 dark:bg-gray-800 rounded-full mt-1">
+                          <div className="h-full bg-danger-500 rounded-full" style={{ width: `${s.percentage}%` }} />
+                        </div>
                       </div>
+                      <span className="text-sm font-bold text-danger-600">{s.percentage}%</span>
                     </div>
-                    <span className="text-sm font-bold text-danger-600">{s.percentage}%</span>
-                  </div>
-                ))}
+                  ))
+                )}
               </div>
             </Card>
           </motion.div>

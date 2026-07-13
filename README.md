@@ -1,159 +1,154 @@
-# ClassAttend - Attendance Management System
+# ClassAttend - Attendance Management PWA
 
-A production-quality Progressive Web App (PWA) for managing daily classroom attendance, optimized for mobile devices.
+A **production-quality Progressive Web App (PWA)** for managing daily classroom attendance. Built with React + TypeScript + Supabase (backendless architecture).
 
 ## Tech Stack
 
-**Frontend:**
-- React 19 + TypeScript
-- Vite
-- Tailwind CSS
-- React Router
-- React Query
-- React Hook Form + Zod
-- Framer Motion (animations)
-- Recharts (charts)
-- Supabase Client
-
-**Backend:**
-- Node.js + Express
-- TypeScript
-- Supabase (Database + Auth + Realtime)
-
-**Database:**
-- PostgreSQL (Supabase)
-
-## Project Structure
-
-```
-├── client/                 # Frontend React app
-│   ├── src/
-│   │   ├── components/     # Reusable UI components
-│   │   │   └── ui/         # Button, Card, Input, Modal, etc.
-│   │   ├── contexts/       # React contexts (Auth, Theme, Offline)
-│   │   ├── layouts/        # Page layouts (MainLayout, AuthLayout)
-│   │   ├── lib/            # Utilities (supabase, api client)
-│   │   ├── pages/          # Route pages
-│   │   └── hooks/          # Custom hooks
-│   └── public/             # Static assets
-├── server/                 # Backend Express API
-│   ├── src/
-│   │   ├── routes/         # API routes
-│   │   ├── middleware/      # Auth, error handling
-│   │   └── lib/            # Supabase client
-│   └── .env.example
-├── shared/                 # Shared TypeScript types
-└── database/               # Supabase SQL schema
-```
-
-## Getting Started
-
-### Prerequisites
-- Node.js 18+
-- npm or yarn
-- Supabase project (free tier)
-
-### 1. Clone & Install
-
-```bash
-# Install client dependencies
-cd client
-npm install
-
-# Install server dependencies
-cd ../server
-npm install
-```
-
-### 2. Environment Setup
-
-```bash
-# Client
-cp client/.env.example client/.env
-# Edit client/.env with your Supabase credentials
-
-# Server
-cp server/.env.example server/.env
-# Edit server/.env with your Supabase credentials
-```
-
-### 3. Database Setup
-
-1. Go to your Supabase dashboard
-2. Open SQL Editor
-3. Run the contents of `database/schema.sql`
-
-### 4. Run Development
-
-```bash
-# Terminal 1 - Client
-cd client
-npm run dev
-
-# Terminal 2 - Server
-cd server
-npm run dev
-```
-
-### 5. Build for Production
-
-```bash
-# Client
-cd client
-npm run build
-
-# Server
-cd server
-npm run build
-```
-
-## Deployment
-
-### Frontend (Vercel)
-1. Push to GitHub
-2. Import in Vercel
-3. Set root directory to `client`
-4. Add environment variables
-
-### Backend (Render)
-1. Push to GitHub
-2. Create new Web Service on Render
-3. Set root directory to `server`
-4. Add environment variables
-
-### Database (Supabase)
-- Already hosted on Supabase
-- Free tier includes 500MB database
+- **Frontend:** React 19, TypeScript, Vite, Tailwind CSS
+- **Backend:** None — all data handled directly by Supabase
+- **Database:** PostgreSQL via Supabase
+- **Auth:** Supabase Authentication
+- **Realtime:** Supabase Realtime
+- **State Management:** React Query + React Context
+- **Forms:** React Hook Form + Zod
+- **PWA:** vite-plugin-pwa
 
 ## Features
 
-- [x] Mobile-first responsive design
-- [x] Dark/Light/System theme
-- [x] Touch-friendly attendance cards
-- [x] One-tap attendance marking (cycle: Present → Absent → Leave → Reset)
-- [x] Quick actions (Mark All Present/Absent/Reset)
-- [x] Live attendance summary
-- [x] Student CRUD with search
-- [x] Import/Export (Excel, CSV)
-- [x] Attendance history with calendar view
-- [x] Reports (Daily, Weekly, Monthly, Student-wise)
-- [x] Analytics with charts
-- [x] Teacher portal (read-only)
-- [x] Settings management
-- [x] PWA support (installable)
-- [x] Offline support with sync
-- [x] Real-time sync between CR users
-- [x] Audit logs
-- [x] Role-based access control
-- [x] Supabase RLS security
+- ⚡ One-tap attendance marking (Present → Absent → Leave → Reset)
+- 👥 Student management with CRUD operations
+- 📊 Dashboard with live statistics
+- 📱 PWA — installable on Android, works offline
+- 🔄 Real-time sync between CR users
+- 📈 Analytics with charts
+- 🌙 Dark/Light/System theme
+- 📤 Export to PDF, Excel, CSV
+- 🔐 Role-based access (Admin, CR, Teacher)
+- 📋 Attendance history with calendar view
+- 🧑‍🏫 Teacher portal (read-only)
 
 ## Roles & Permissions
 
 | Feature | Admin | CR | Teacher |
-|---------|-------|-----|--------|
+|---------|-------|-----|---------|
 | Manage Students | ✓ | ✓ | ✗ |
 | Mark Attendance | ✓ | ✓ | ✗ |
 | Edit Attendance | ✓ | ✓ | ✗ |
 | View Reports | ✓ | ✓ | ✓ |
 | Download Reports | ✓ | ✓ | ✓ |
 | Settings | ✓ | ✗ | ✗ |
+
+## Getting Started
+
+### 1. Clone the repository
+
+```bash
+git clone https://github.com/Shubhams1712/Attendence_app.git
+cd Attendence_app
+```
+
+### 2. Install dependencies
+
+```bash
+cd client
+npm install
+```
+
+### 3. Set up Supabase
+
+1. Create a free account at [supabase.com](https://supabase.com)
+2. Create a new project
+3. Go to SQL Editor and run the contents of `database/schema.sql`
+4. Get your project URL and anon key from Settings → API
+
+### 4. Configure environment variables
+
+```bash
+cd client
+cp .env.example .env
+```
+
+Edit `.env` and add your Supabase credentials:
+
+```
+VITE_SUPABASE_URL=https://your-project.supabase.co
+VITE_SUPABASE_ANON_KEY=your-anon-key
+```
+
+### 5. Run the development server
+
+```bash
+npm run dev
+```
+
+The app will be available at `http://localhost:5173`
+
+## Project Structure
+
+```
+├── client/                  # Frontend (React + Vite)
+│   ├── public/             # Static assets (icons, favicon)
+│   ├── src/
+│   │   ├── components/ui/  # Reusable UI components
+│   │   ├── contexts/       # React contexts (Auth, Theme, Offline)
+│   │   ├── hooks/          # Custom hooks + React Query hooks
+│   │   ├── layouts/        # Page layouts
+│   │   ├── lib/            # Utilities, Supabase client, share/export
+│   │   ├── pages/          # Page components
+│   │   ├── services/       # Supabase service layer
+│   │   ├── types/          # TypeScript type definitions
+│   │   ├── App.tsx         # Router configuration
+│   │   └── main.tsx        # App entry point
+│   └── package.json
+├── database/
+│   └── schema.sql          # Complete Supabase database schema with RLS
+├── README.md
+└── .gitignore
+```
+
+## Deployment
+
+### Vercel (Frontend)
+
+1. Push to GitHub
+2. Connect repository to [Vercel](https://vercel.com)
+3. Set environment variables in Vercel dashboard
+4. Deploy
+
+### Supabase (Backend)
+
+- Database, Auth, Realtime, and RLS are all managed by Supabase
+- No separate backend deployment needed
+
+## Features Checklist
+
+- [x] React + TypeScript + Vite
+- [x] Tailwind CSS with dark/light mode
+- [x] Supabase Authentication with roles
+- [x] Student management (CRUD)
+- [x] One-tap attendance marking
+- [x] Mark All Present/Absent/Reset
+- [x] Search and filter students
+- [x] Sort by roll number/name
+- [x] Live attendance summary
+- [x] Dashboard with statistics
+- [x] Attendance history (list + calendar view)
+- [x] Reports with export (PDF, Excel, CSV)
+- [x] Analytics with charts
+- [x] Teacher portal (read-only)
+- [x] Real-time sync between CR users
+- [x] Offline support with IndexedDB
+- [x] PWA (installable on Android)
+- [x] Role-based access control
+- [x] Row Level Security (RLS)
+- [x] Share attendance via WhatsApp/Telegram/Email
+- [x] Toast notifications
+- [x] Skeleton loaders
+- [x] Empty states
+- [x] Smooth animations (Framer Motion)
+- [x] Mobile-first responsive design
+- [x] Bottom navigation
+
+## License
+
+MIT
