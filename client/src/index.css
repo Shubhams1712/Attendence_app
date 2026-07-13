@@ -1,0 +1,182 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  * {
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  html {
+    @apply scroll-smooth;
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    @apply bg-gray-50 text-gray-900 dark:bg-gray-950 dark:text-gray-100;
+    font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
+    overscroll-behavior: none;
+  }
+
+  /* Safe area insets for mobile */
+  .safe-top {
+    padding-top: env(safe-area-inset-top);
+  }
+
+  .safe-bottom {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+
+  .safe-left {
+    padding-left: env(safe-area-inset-left);
+  }
+
+  .safe-right {
+    padding-right: env(safe-area-inset-right);
+  }
+}
+
+@layer components {
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-2xl px-6 py-3
+           font-semibold text-sm transition-all duration-200 ease-out
+           active:scale-[0.97] disabled:opacity-50 disabled:cursor-not-allowed
+           focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-500
+           focus-visible:ring-offset-2 dark:focus-visible:ring-offset-gray-950;
+  }
+
+  .btn-primary {
+    @apply btn bg-primary-600 text-white hover:bg-primary-700
+           shadow-soft hover:shadow-soft-lg active:bg-primary-800;
+  }
+
+  .btn-secondary {
+    @apply btn bg-gray-100 text-gray-700 hover:bg-gray-200
+           dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700;
+  }
+
+  .btn-success {
+    @apply btn bg-success-500 text-white hover:bg-success-600
+           shadow-soft hover:shadow-soft-lg;
+  }
+
+  .btn-danger {
+    @apply btn bg-danger-500 text-white hover:bg-danger-600
+           shadow-soft hover:shadow-soft-lg;
+  }
+
+  .btn-warning {
+    @apply btn bg-warning-500 text-white hover:bg-warning-600
+           shadow-soft hover:shadow-soft-lg;
+  }
+
+  .btn-ghost {
+    @apply btn bg-transparent text-gray-600 hover:bg-gray-100
+           dark:text-gray-300 dark:hover:bg-gray-800;
+  }
+
+  .btn-icon {
+    @apply btn p-3 rounded-xl;
+  }
+
+  .card {
+    @apply bg-white dark:bg-gray-900 rounded-2xl shadow-soft
+           border border-gray-100 dark:border-gray-800 p-4;
+  }
+
+  .card-interactive {
+    @apply card cursor-pointer transition-all duration-200
+           hover:shadow-soft-lg hover:-translate-y-0.5
+           active:scale-[0.98] active:shadow-soft;
+  }
+
+  .input {
+    @apply w-full rounded-xl border border-gray-200 dark:border-gray-700
+           bg-white dark:bg-gray-800 px-4 py-3 text-sm
+           placeholder:text-gray-400 dark:placeholder:text-gray-500
+           focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent
+           transition-all duration-200;
+  }
+
+  .label {
+    @apply block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5;
+  }
+
+  .badge {
+    @apply inline-flex items-center rounded-full px-2.5 py-0.5
+           text-xs font-medium transition-colors;
+  }
+
+  .badge-present {
+    @apply badge bg-success-100 text-success-600 dark:bg-success-500/20 dark:text-success-400;
+  }
+
+  .badge-absent {
+    @apply badge bg-danger-100 text-danger-600 dark:bg-danger-500/20 dark:text-danger-400;
+  }
+
+  .badge-leave {
+    @apply badge bg-warning-100 text-warning-600 dark:bg-warning-500/20 dark:text-warning-400;
+  }
+
+  .bottom-nav {
+    @apply fixed bottom-0 left-0 right-0 z-50
+           bg-white/80 dark:bg-gray-900/80 backdrop-blur-xl
+           border-t border-gray-200 dark:border-gray-800
+           safe-bottom;
+  }
+
+  .page-container {
+    @apply min-h-screen pb-24 pt-4 px-4 safe-top;
+  }
+
+  .section-title {
+    @apply text-lg font-bold text-gray-900 dark:text-white mb-3;
+  }
+
+  .skeleton {
+    @apply animate-pulse bg-gray-200 dark:bg-gray-800 rounded-xl;
+  }
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  @apply bg-gray-300 dark:bg-gray-700 rounded-full;
+}
+
+/* Prevent pull-to-refresh on mobile */
+body {
+  overscroll-behavior-y: contain;
+}
+
+/* Smooth page transitions */
+.page-transition-enter {
+  opacity: 0;
+  transform: translateY(8px);
+}
+
+.page-transition-enter-active {
+  opacity: 1;
+  transform: translateY(0);
+  transition: opacity 200ms ease-out, transform 200ms ease-out;
+}
+
+/* Attendance card tap animation */
+@keyframes tapFeedback {
+  0% { transform: scale(1); }
+  50% { transform: scale(0.96); }
+  100% { transform: scale(1); }
+}
+
+.tap-feedback {
+  animation: tapFeedback 150ms ease-out;
+}
