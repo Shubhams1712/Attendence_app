@@ -8,6 +8,7 @@ interface AuthContextType {
   signIn: (email: string, password: string) => Promise<{ error?: string }>;
   signUp: (email: string, password: string, fullName: string, role: UserRole) => Promise<{ error?: string }>;
   signOut: () => Promise<void>;
+  resetPassword: (email: string) => Promise<{ error?: string }>;
   hasRole: (...roles: UserRole[]) => boolean;
 }
 
@@ -50,10 +51,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         .eq('id', userId)
         .single();
 
-      if (error) throw error;
-      setUser(data as User);
-    } catch {
-      console.error('Failed to fetch user profile');
+      if (error) {
+        // Profile might not exist yet (trigger hasn't fired). Create a minimal one.
+        const { data: { user: authUser } } = await supabase.auth.getUser();
+        if (authUser) {
+          setUser({
+            id: authUser.id,
+            email: authUser.email || '',
+            full_name: (authUser.user_metadata as Record<string, string>)?.full_name || authUser.email || 'User',
+            role: ((authUser.user_metadata as Record<string, string>)?.role as UserRole) || 'cr',
+            created_at: authUser.created_at || new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          });
+        }
+      } else {
+        setUser(data as User);
+      }
+    } catch (err) {
+      console.error('Failed to fetch user profile:', err);
     } finally {
       setLoading(false);
     }
@@ -101,12 +116,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setUser(null);
   }, []);
 
+  const resetPassword = useCallback(async (email: string) => {
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: `${window.location.origin}/login`,
+      });
+      if (error) return { error: error.message };
+      return {};
+    } catch {
+      return { error: 'Failed to send reset email' };
+    }
+  }, []);
+
   const hasRole = useCallback((...roles: UserRole[]) => {
     return user ? roles.includes(user.role) : false;
   }, [user]);
 
   return (
-    <AuthContext.Provider value={{ user, loading, signIn, signUp, signOut, hasRole }}>
+    <AuthContext.Provider value={{ user, loading, signIn, signUp, signOut, resetPassword, hasRole }}>
       {children}
     </AuthContext.Provider>
   );

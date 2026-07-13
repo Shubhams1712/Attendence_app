@@ -4,7 +4,7 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { motion } from 'framer-motion';
-import { Mail, Lock, ArrowRight } from 'lucide-react';
+import { Mail, Lock, ArrowRight, KeyRound } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
@@ -18,12 +18,15 @@ const loginSchema = z.object({
 type LoginForm = z.infer<typeof loginSchema>;
 
 export function LoginPage() {
-  const { signIn } = useAuth();
+  const { signIn, resetPassword } = useAuth();
   const [loading, setLoading] = useState(false);
+  const [resetSent, setResetSent] = useState(false);
 
-  const { register, handleSubmit, formState: { errors } } = useForm<LoginForm>({
+  const { register, handleSubmit, watch, formState: { errors } } = useForm<LoginForm>({
     resolver: zodResolver(loginSchema),
   });
+
+  const emailValue = watch('email');
 
   const onSubmit = async (data: LoginForm) => {
     setLoading(true);
@@ -34,6 +37,20 @@ export function LoginPage() {
       toast.error(result.error);
     } else {
       toast.success('Welcome back!');
+    }
+  };
+
+  const handleForgotPassword = async () => {
+    if (!emailValue) {
+      toast.error('Enter your email first');
+      return;
+    }
+    const result = await resetPassword(emailValue);
+    if (result.error) {
+      toast.error(result.error);
+    } else {
+      setResetSent(true);
+      toast.success('Password reset email sent!');
     }
   };
 
@@ -74,7 +91,20 @@ export function LoginPage() {
           </Button>
         </form>
 
-        <div className="mt-6 text-center">
+        <div className="mt-6 space-y-3 text-center">
+          {resetSent ? (
+            <p className="text-sm text-success-600 font-medium">
+              ✓ Check your email for the reset link
+            </p>
+          ) : (
+            <button
+              type="button"
+              onClick={handleForgotPassword}
+              className="text-sm text-primary-600 dark:text-primary-400 hover:underline inline-flex items-center gap-1"
+            >
+              <KeyRound size={14} /> Forgot password?
+            </button>
+          )}
           <p className="text-sm text-gray-500 dark:text-gray-400">
             Don't have an account?{' '}
             <Link

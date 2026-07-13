@@ -45,7 +45,7 @@ export function RegisterPage() {
     if (result.error) {
       toast.error(result.error);
     } else {
-      toast.success('Account created! Please check your email to verify.');
+      toast.success('Account created! You can now sign in.');
     }
   };
 
