@@ -38,24 +38,34 @@ export function TeacherPortalPage() {
           .limit(30);
 
         if (sessions) {
-          const summaries: AttendanceSummaryRow[] = [];
-          for (const session of sessions) {
-            const { data: records } = await supabase
-              .from('attendance_records')
-              .select('status')
-              .eq('session_id', session.id);
+          // Fetch all records for these sessions in one query (fixes N+1)
+          const sessionIds = sessions.map((s) => s.id);
+          const { data: allRecords } = await supabase
+            .from('attendance_records')
+            .select('session_id, status')
+            .in('session_id', sessionIds);
 
-            if (records) {
-              summaries.push({
-                date: session.date,
-                subject: 'Unknown',
-                present: records.filter((r) => r.status === 'present').length,
-                absent: records.filter((r) => r.status === 'absent').length,
-                leave: records.filter((r) => r.status === 'leave').length,
-                total: records.length,
-              });
+          // Group records by session_id
+          const recordsBySession = new Map<string, { status: string }[]>();
+          if (allRecords) {
+            for (const record of allRecords) {
+              const existing = recordsBySession.get(record.session_id) || [];
+              existing.push(record);
+              recordsBySession.set(record.session_id, existing);
             }
           }
+
+          const summaries: AttendanceSummaryRow[] = sessions.map((session) => {
+            const records = recordsBySession.get(session.id) || [];
+            return {
+              date: session.date,
+              subject: 'Unknown',
+              present: records.filter((r) => r.status === 'present').length,
+              absent: records.filter((r) => r.status === 'absent').length,
+              leave: records.filter((r) => r.status === 'leave').length,
+              total: records.length,
+            };
+          });
           setAttendance(summaries);
         }
       } catch {

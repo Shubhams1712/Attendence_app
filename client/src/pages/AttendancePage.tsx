@@ -27,7 +27,7 @@ import toast from 'react-hot-toast';
 
 const DEFAULT_CLASS_ID = '00000000-0000-0000-0000-000000000001';
 const DEFAULT_SUBJECT_ID = '00000000-0000-0000-0000-000000000011';
-const DEFAULT_TEACHER_ID = '00000000-0000-0000-0000-000000000021';
+// teacher_id references profiles(id), not teachers table — use NULL until a teacher profile exists
 
 type SortMode = 'roll' | 'name';
 type FilterMode = 'all' | 'present' | 'absent' | 'leave' | 'unmarked';
@@ -245,7 +245,7 @@ export function AttendancePage() {
       const now = new Date();
       const result = await createSession.mutateAsync({
         subject_id: DEFAULT_SUBJECT_ID,
-        teacher_id: DEFAULT_TEACHER_ID,
+        teacher_id: null,
         date: now.toISOString().split('T')[0] || '',
         start_time: `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`,
         end_time: `${String(now.getHours() + 1).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`,

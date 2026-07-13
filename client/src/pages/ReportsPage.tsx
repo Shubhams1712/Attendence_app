@@ -38,12 +38,20 @@ export function ReportsPage() {
   const handleExport = async (format: string) => {
     setIsGenerating(true);
     try {
-      // Fetch attendance records for the selected date
+      // First get student IDs for this class
+      const studentIds = students.map((s) => s.id);
+      if (studentIds.length === 0) {
+        toast.error('No students found');
+        setIsGenerating(false);
+        return;
+      }
+
+      // Fetch attendance records for the selected date, filtered by student IDs
       const { data: records } = await supabase
         .from('attendance_records')
-        .select('*, students:student_id (full_name, roll_number, gender)')
+        .select('*')
         .eq('date', selectedDate)
-        .eq('students.class_id', DEFAULT_CLASS_ID);
+        .in('student_id', studentIds);
 
       if (!records || records.length === 0) {
         toast.error('No attendance records found for this date');
@@ -56,10 +64,13 @@ export function ReportsPage() {
         subject: selectedSubject === 'all' ? 'All Subjects' : selectedSubject,
         teacher: 'Teacher',
         date: selectedDate,
-        records: records.map((r) => ({
-          student: r.students as unknown as Student,
-          status: r.status as 'present' | 'absent' | 'leave' | 'unmarked',
-        })),
+        records: records.map((r) => {
+          const student = students.find((s) => s.id === r.student_id);
+          return {
+            student: student as Student,
+            status: r.status as 'present' | 'absent' | 'leave' | 'unmarked',
+          };
+        }),
         summary: {
           date: selectedDate,
           subject_id: selectedSubject,

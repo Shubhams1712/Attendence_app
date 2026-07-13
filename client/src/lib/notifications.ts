@@ -10,8 +10,8 @@ export async function requestNotificationPermission(): Promise<boolean> {
 export function sendNotification(title: string, options?: NotificationOptions) {
   if (Notification.permission === 'granted') {
     new Notification(title, {
-      icon: '/icons/icon-192x192.png',
-      badge: '/icons/icon-192x192.png',
+      icon: '/icons/icon-192x192.svg',
+      badge: '/icons/icon-192x192.svg',
       ...options,
     } as NotificationOptions);
   }

@@ -50,10 +50,13 @@ export function AnalyticsPage() {
       // Get all attendance records for the last 6 months
       const sixMonthsAgo = format(subMonths(new Date(), 6), 'yyyy-MM-dd');
 
+      const studentIds = students.map((s) => s.id);
+      if (studentIds.length === 0) return;
+
       const { data: records } = await supabase
         .from('attendance_records')
         .select('*')
-        .eq('students.class_id', DEFAULT_CLASS_ID)
+        .in('student_id', studentIds)
         .gte('date', sixMonthsAgo);
 
       // Calculate monthly data

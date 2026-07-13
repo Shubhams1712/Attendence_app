@@ -168,7 +168,7 @@ export interface AttendanceRecord {
 export interface AttendanceSession {
   id: string;
   subject_id: string;
-  teacher_id: string;
+  teacher_id: string | null;
   date: string;
   start_time: string;
   end_time: string;
