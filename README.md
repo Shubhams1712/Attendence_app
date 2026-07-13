@@ -142,7 +142,7 @@ npm run build
 - [x] Settings management
 - [x] PWA support (installable)
 - [x] Offline support with sync
-- [x] Real-time sync between CR/Partner CR
+- [x] Real-time sync between CR users
 - [x] Audit logs
 - [x] Role-based access control
 - [x] Supabase RLS security
