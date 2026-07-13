@@ -79,7 +79,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     role: UserRole
   ) => {
     try {
-      const { data, error } = await supabase.auth.signUp({
+      // The trigger handle_new_user() in Supabase automatically creates
+      // a profile row when a new user signs up. We just need to pass
+      // full_name and role in the metadata.
+      const { error } = await supabase.auth.signUp({
         email,
         password,
         options: {
@@ -87,18 +90,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         },
       });
       if (error) return { error: error.message };
-
-      if (data.user) {
-        const { error: profileError } = await supabase
-          .from('profiles')
-          .insert({
-            id: data.user.id,
-            email,
-            full_name: fullName,
-            role,
-          } as any);
-        if (profileError) return { error: profileError.message };
-      }
       return {};
     } catch {
       return { error: 'Failed to sign up' };
