@@ -11,7 +11,7 @@ import { exportToPDF, exportToExcel, exportToCSV } from '@/lib/share';
 import toast from 'react-hot-toast';
 import type { Student, AttendanceRecord } from '@/types';
 
-const DEFAULT_CLASS_ID = '1';
+const DEFAULT_CLASS_ID = '00000000-0000-0000-0000-000000000001';
 
 const reportTypes = [
   { id: 'daily', label: 'Daily', icon: <Calendar size={14} /> },

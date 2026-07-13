@@ -32,7 +32,7 @@ interface DashboardStats {
 }
 
 // Default class_id - in production this would come from user settings
-const DEFAULT_CLASS_ID = '1';
+const DEFAULT_CLASS_ID = '00000000-0000-0000-0000-000000000001';
 
 export function DashboardPage() {
   const { user } = useAuth();

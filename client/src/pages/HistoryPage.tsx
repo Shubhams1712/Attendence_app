@@ -9,7 +9,7 @@ import { format, subDays, addDays, startOfWeek, endOfWeek, eachDayOfInterval } f
 import toast from 'react-hot-toast';
 import type { AttendanceSession } from '@/types';
 
-const DEFAULT_CLASS_ID = '1';
+const DEFAULT_CLASS_ID = '00000000-0000-0000-0000-000000000001';
 
 export function HistoryPage() {
   const [viewMode, setViewMode] = useState<'calendar' | 'list'>('list');

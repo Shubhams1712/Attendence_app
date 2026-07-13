@@ -24,7 +24,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import toast from 'react-hot-toast';
 
-const DEFAULT_CLASS_ID = '1';
+const DEFAULT_CLASS_ID = '00000000-0000-0000-0000-000000000001';
 
 const studentSchema = z.object({
   roll_number: z.string().min(1, 'Roll number is required'),

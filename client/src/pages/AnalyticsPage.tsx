@@ -8,7 +8,7 @@ import { supabase } from '@/lib/supabase';
 import { format, subMonths, startOfMonth, endOfMonth } from 'date-fns';
 import type { Student } from '@/types';
 
-const DEFAULT_CLASS_ID = '1';
+const DEFAULT_CLASS_ID = '00000000-0000-0000-0000-000000000001';
 
 interface StudentStats {
   name: string;

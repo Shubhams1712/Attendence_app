@@ -25,9 +25,9 @@ import type { AttendanceStatus, Student, AttendanceRecord } from '@/types';
 import clsx from 'clsx';
 import toast from 'react-hot-toast';
 
-const DEFAULT_CLASS_ID = '1';
-const DEFAULT_SUBJECT_ID = '1';
-const DEFAULT_TEACHER_ID = '1';
+const DEFAULT_CLASS_ID = '00000000-0000-0000-0000-000000000001';
+const DEFAULT_SUBJECT_ID = '00000000-0000-0000-0000-000000000011';
+const DEFAULT_TEACHER_ID = '00000000-0000-0000-0000-000000000021';
 
 type SortMode = 'roll' | 'name';
 type FilterMode = 'all' | 'present' | 'absent' | 'leave' | 'unmarked';
