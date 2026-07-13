@@ -24,7 +24,7 @@ export function RegisterPage() {
   const { signUp } = useAuth();
   const [loading, setLoading] = useState(false);
 
-  const { register, handleSubmit, formState: { errors }, watch } = useForm<RegisterForm>({
+  const { register, handleSubmit, formState: { errors }, watch, setValue } = useForm<RegisterForm>({
     resolver: zodResolver(registerSchema),
     defaultValues: { role: 'cr' },
   });
@@ -87,7 +87,7 @@ export function RegisterPage() {
           <Select
             label="Role"
             value={selectedRole || ''}
-            onChange={(val) => {}}
+            onChange={(val) => setValue('role', val as 'cr' | 'teacher')}
             options={roleOptions}
             error={errors.role?.message}
           />

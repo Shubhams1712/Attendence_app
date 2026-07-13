@@ -149,11 +149,11 @@ npm run build
 
 ## Roles & Permissions
 
-| Feature | Admin | CR | Partner CR | Teacher |
-|---------|-------|-----|------------|---------|
-| Manage Students | ✓ | ✓ | ✓ | ✗ |
-| Mark Attendance | ✓ | ✓ | ✓ | ✗ |
-| Edit Attendance | ✓ | ✓ | ✓ | ✗ |
-| View Reports | ✓ | ✓ | ✓ | ✓ |
-| Download Reports | ✓ | ✓ | ✓ | ✓ |
-| Settings | ✓ | ✗ | ✗ | ✗ |
+| Feature | Admin | CR | Teacher |
+|---------|-------|-----|--------|
+| Manage Students | ✓ | ✓ | ✗ |
+| Mark Attendance | ✓ | ✓ | ✗ |
+| Edit Attendance | ✓ | ✓ | ✗ |
+| View Reports | ✓ | ✓ | ✓ |
+| Download Reports | ✓ | ✓ | ✓ |
+| Settings | ✓ | ✗ | ✗ |
