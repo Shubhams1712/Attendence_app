@@ -65,21 +65,20 @@ export function NewAttendancePage() {
     }
 });
 
-  const handleQuickAddSubject = async () => {
-    const name = prompt('Enter subject name:');
-    if (name?.trim()) {
-      try {
-        await addSubject(name.trim());
-        if (classData?.id) {
-          const subs = await services.getSubjects(classData.id);
-          setSubjects(subs);
-        }
-      } catch (e) {
-        console.error('Failed to add subject:', e);
-        showToast('Failed to add subject', 'error');
-      }
-    }
-  };
+const handleStart = () => {
+  if (!isValid) return;
+
+  navigate('/attendance/take', {
+    state: {
+      date,
+      subjectId,
+      facultyId,
+      lectureNumber,
+      lectureCount,
+      classroom,
+    },
+  });
+};
 
   const handleQuickAddFaculty = async () => {
     const name = prompt('Enter faculty name:');
