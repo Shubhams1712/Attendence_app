@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useApp } from '@/contexts/AppContext';
 import { useAuth } from '@/contexts/AuthContext';
@@ -14,14 +14,14 @@ export function NewAttendancePage() {
   const navigate = useNavigate();
   const { showToast, addSubject, addFaculty } = useApp();
   const { classData } = useAuth();
-  const [lectureCount, setLectureCount] = useState(1);
 
   const [subjects, setSubjects] = useState<Subject[]>([]);
   const [faculty, setFaculty] = useState<Faculty[]>([]);
   const [date, setDate] = useState(getTodayDateString());
   const [subjectId, setSubjectId] = useState<string | null>(null);
   const [facultyId, setFacultyId] = useState<string | null>(null);
-  const [lectureNumber, setLectureNumber] = useState(1);
+  const [lectureNumber, setLectureNumber] = useState<number | ''>(1);
+  const [lectureCount, setLectureCount] = useState<number | ''>(1);
   const [classroom, setClassroom] = useState('');
   const [searchSubject, setSearchSubject] = useState('');
 
@@ -46,9 +46,11 @@ export function NewAttendancePage() {
     }
   };
 
-  const filteredSubjects = subjects.filter(s =>
-    (s.name || '').toLowerCase().includes(searchSubject.toLowerCase())
-  );
+  const filteredSubjects = useMemo(() => {
+    return subjects.filter(s =>
+      (s.name || '').toLowerCase().includes(searchSubject.toLowerCase())
+    );
+  }, [subjects, searchSubject]);
 
   const isValid = date && subjectId && facultyId;
 
@@ -60,8 +62,8 @@ export function NewAttendancePage() {
         date,
         subjectId,
         facultyId,
-        lectureNumber,
-        lectureCount,
+        lectureNumber: lectureNumber || 1,
+        lectureCount: lectureCount || 1,
         classroom,
       },
     });
@@ -116,9 +118,13 @@ export function NewAttendancePage() {
       <Card>
         <div className="flex items-center justify-between mb-2">
           <label className="text-sm font-medium text-text-secondary">Subject</label>
-          {subjects.length === 0 && (
-            <button onClick={handleQuickAddSubject} className="text-xs text-primary-600 font-medium">+ Add</button>
-          )}
+          <button 
+            type="button" 
+            onClick={handleQuickAddSubject} 
+            className="text-xs text-primary-600 font-medium hover:underline focus:outline-none"
+          >
+            + Add Subject
+          </button>
         </div>
         <SearchInput
           value={searchSubject}
@@ -130,6 +136,7 @@ export function NewAttendancePage() {
           {filteredSubjects.map(subject => (
             <button
               key={subject.id}
+              type="button"
               onClick={() => setSubjectId(subject.id)}
               className={`w-full text-left px-3 py-2.5 rounded-lg text-sm transition-colors flex items-center gap-2 ${
                 subjectId === subject.id
@@ -153,14 +160,19 @@ export function NewAttendancePage() {
       <Card>
         <div className="flex items-center justify-between mb-2">
           <label className="text-sm font-medium text-text-secondary">Faculty</label>
-          {faculty.length === 0 && (
-            <button onClick={handleQuickAddFaculty} className="text-xs text-primary-600 font-medium">+ Add</button>
-          )}
+          <button 
+            type="button" 
+            onClick={handleQuickAddFaculty} 
+            className="text-xs text-primary-600 font-medium hover:underline focus:outline-none"
+          >
+            + Add Faculty
+          </button>
         </div>
         <div className="max-h-32 overflow-y-auto space-y-1">
           {faculty.map(f => (
             <button
               key={f.id}
+              type="button"
               onClick={() => setFacultyId(f.id)}
               className={`w-full text-left px-3 py-2.5 rounded-lg text-sm transition-colors flex items-center gap-2 ${
                 facultyId === f.id
@@ -189,8 +201,8 @@ export function NewAttendancePage() {
             <input
               type="number"
               min={1}
-              value={lectureNumber || ''}
-              onChange={(e) => setLectureNumber(e.target.value === '' ? 0 : Number(e.target.value))}
+              value={lectureNumber}
+              onChange={(e) => setLectureNumber(e.target.value === '' ? '' : Number(e.target.value))}
               className="w-full px-3 py-2.5 bg-surface border border-border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
             />
           </div>
@@ -203,8 +215,8 @@ export function NewAttendancePage() {
             <input
               type="number"
               min={1}
-              value={lectureCount || ''}
-              onChange={(e) => setLectureCount(e.target.value === '' ? 0 : Number(e.target.value))}
+              value={lectureCount}
+              onChange={(e) => setLectureCount(e.target.value === '' ? '' : Number(e.target.value))}
               className="w-full px-3 py-2.5 bg-surface border border-border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
             />
           </div>
@@ -214,7 +226,7 @@ export function NewAttendancePage() {
           <label className="block text-sm font-medium text-text-secondary mb-2">
             <MapPin className="w-3.5 h-3.5 inline mr-1" />
             Classroom
-          </label>
+          </label> 
           <input
             type="text"
             value={classroom}
