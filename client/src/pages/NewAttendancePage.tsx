@@ -7,7 +7,7 @@ import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { SearchInput } from '@/components/ui/SearchInput';
 import { getTodayDateString } from '@/lib/utils';
-import { BookOpen, UserCheck, Hash, MapPin, Calendar, Play } from 'lucide-react';
+import { BookOpen, UserCheck, Hash, MapPin, Play } from 'lucide-react';
 import type { Subject, Faculty } from '@/types';
 
 export function NewAttendancePage() {
@@ -54,31 +54,34 @@ export function NewAttendancePage() {
 
   const handleStart = () => {
     if (!isValid) return;
+
     navigate('/attendance/take', {
-    state: {
+      state: {
         date,
         subjectId,
         facultyId,
         lectureNumber,
         lectureCount,
-        classroom
+        classroom,
+      },
+    });
+  };
+
+  const handleQuickAddSubject = async () => {
+    const name = prompt('Enter subject name:');
+    if (name?.trim()) {
+      try {
+        await addSubject(name.trim());
+        if (classData?.id) {
+          const subs = await services.getSubjects(classData.id);
+          setSubjects(subs);
+        }
+      } catch (e) {
+        console.error('Failed to add subject:', e);
+        showToast('Failed to add subject', 'error');
+      }
     }
-});
-
-const handleStart = () => {
-  if (!isValid) return;
-
-  navigate('/attendance/take', {
-    state: {
-      date,
-      subjectId,
-      facultyId,
-      lectureNumber,
-      lectureCount,
-      classroom,
-    },
-  });
-};
+  };
 
   const handleQuickAddFaculty = async () => {
     const name = prompt('Enter faculty name:');
@@ -177,30 +180,36 @@ const handleStart = () => {
 
       {/* Lecture Number & Classroom */}
       <div className="grid grid-cols-2 gap-3">
-        <Card>
-          <label className="block text-sm font-medium text-text-secondary mb-2">
-            <Hash className="w-3.5 h-3.5 inline mr-1" />
-            Lecture #
-            
-          </label>
-          <input
-            type="number"
-            min={1}
-            value={lectureNumber}
-            onChange={(e) => setLectureNumber(Number(e.target.value))}
-            className="w-full px-3 py-2.5 bg-surface border border-border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
-          />
-          <label>
-            Number of Lectures
-          </label>
-
-          <input
-            type="number"
-            min={1}
-            value={lectureCount}
-            onChange={(e)=>setLectureCount(Number(e.target.value))}
-          />
+        <Card className="space-y-3">
+          <div>
+            <label className="block text-sm font-medium text-text-secondary mb-2">
+              <Hash className="w-3.5 h-3.5 inline mr-1" />
+              Lecture #
+            </label>
+            <input
+              type="number"
+              min={1}
+              value={lectureNumber || ''}
+              onChange={(e) => setLectureNumber(e.target.value === '' ? 0 : Number(e.target.value))}
+              className="w-full px-3 py-2.5 bg-surface border border-border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+            />
+          </div>
+          
+          <div>
+            <label className="block text-sm font-medium text-text-secondary mb-2">
+              <Hash className="w-3.5 h-3.5 inline mr-1" />
+              Number of Lectures
+            </label>
+            <input
+              type="number"
+              min={1}
+              value={lectureCount || ''}
+              onChange={(e) => setLectureCount(e.target.value === '' ? 0 : Number(e.target.value))}
+              className="w-full px-3 py-2.5 bg-surface border border-border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+            />
+          </div>
         </Card>
+        
         <Card>
           <label className="block text-sm font-medium text-text-secondary mb-2">
             <MapPin className="w-3.5 h-3.5 inline mr-1" />
