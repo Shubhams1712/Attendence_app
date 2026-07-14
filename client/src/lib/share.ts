@@ -10,7 +10,7 @@ const SEP = '━━━━━━━━━━━━━━━━━━━━';
 export function generateAttendanceReport(
   session: Session,
   subject: Subject | undefined,
-  faculty: Faculty | undefined,
+  faculty: Faculty |undefined,
   students: Student[],
   records: AttendanceRecord[]
 ): string {
@@ -25,90 +25,86 @@ export function generateAttendanceReport(
   const totalStudents = students.length;
   const presentCount = presentRecords.length;
 
-  const presentStudents = presentRecords
+  const presentRolls = presentRecords
     .map(r => studentMap.get(r.student_id))
     .filter((s): s is Student => !!s)
-    .sort((a, b) => a.roll_number - b.roll_number);
+    .sort((a, b) => a.roll_number - b.roll_number)
+    .map(s => padRoll(s.roll_number));
 
-  const absentStudents = absentRecords
+  const absentRolls = absentRecords
     .map(r => studentMap.get(r.student_id))
     .filter((s): s is Student => !!s)
-    .sort((a, b) => a.roll_number - b.roll_number);
+    .sort((a, b) => a.roll_number - b.roll_number)
+    .map(s => padRoll(s.roll_number));
 
-  const percentage = totalStudents > 0
-    ? ((presentCount / totalStudents) * 100).toFixed(2)
-    : '0';
+  const percentage =
+    totalStudents > 0
+      ? ((presentCount / totalStudents) * 100).toFixed(2)
+      : '0.00';
 
   const lines: string[] = [];
 
-  lines.push(SEP);
-  lines.push('📋 ATTENDANCE REPORT');
-  lines.push(SEP);
-  lines.push('');
+  lines.push("━━━━━━━━━━━━━━━━━━━━");
+  lines.push("📋 ATTENDANCE REPORT");
+  lines.push("━━━━━━━━━━━━━━━━━━━━");
+  lines.push("");
 
   lines.push(`📅 Date : ${formatDate(session.date)}`);
-  lines.push(`🕒 Time : ${session.time || 'N/A'}`);
-  lines.push('');
-  lines.push(`📚 Subject : ${subject?.name || 'N/A'}`);
-  lines.push(`👨‍🏫 Faculty : ${faculty?.name || 'N/A'}`);
-  if (session.classroom) lines.push(`🎓 Classroom : ${session.classroom}`);
-  if (session.lecture_number) lines.push(`📖 Lecture : ${session.lecture_number}`);
-  lines.push('');
+  lines.push(`🕒 Time : ${session.time || "N/A"}`);
+  lines.push(`📚 Subject : ${subject?.name || "N/A"}`);
+  lines.push(`👨‍🏫 Faculty : ${faculty?.name || "N/A"}`);
 
-  lines.push(SEP);
-  lines.push('');
+  if (session.classroom)
+    lines.push(`🎓 Classroom : ${session.classroom}`);
 
-  if (presentStudents.length > 0) {
-    lines.push(`✅ PRESENT (${presentStudents.length})`);
-    lines.push('');
-    presentStudents.forEach(s => lines.push(`${padRoll(s.roll_number)} ${s.name}`));
-    lines.push('');
-    lines.push(SEP);
-    lines.push('');
-  } else {
-    lines.push('✅ Present : None');
-    lines.push('');
-    lines.push(SEP);
-    lines.push('');
-  }
+  if (session.lecture_number)
+    lines.push(`📖 Lecture : ${session.lecture_number}`);
 
-  if (absentStudents.length > 0) {
-    lines.push(`❌ ABSENT (${absentStudents.length})`);
-    lines.push('');
-    absentStudents.forEach(s => lines.push(`${padRoll(s.roll_number)} ${s.name}`));
-    lines.push('');
-    lines.push(SEP);
-    lines.push('');
-  } else {
-    lines.push('❌ Absent : None');
-    lines.push('');
-    lines.push(SEP);
-    lines.push('');
-  }
+  lines.push("");
+  lines.push("━━━━━━━━━━━━━━━━━━━━");
+  lines.push("");
 
-  lines.push('');
-  lines.push('📊 SUMMARY');
-  lines.push('');
-  lines.push(`Present  : ${presentCount}`);
-  lines.push(`Absent   : ${absentRecords.length}`);
-  lines.push(`Late     : ${lateRecords.length}`);
-  lines.push(`Medical  : ${medicalRecords.length}`);
-  lines.push(`Holiday  : ${holidayRecords.length}`);
-  lines.push('');
+  lines.push(`✅ PRESENT (${presentRolls.length})`);
+  lines.push(
+    presentRolls.length > 0
+      ? presentRolls.join(", ")
+      : "None"
+  );
+
+  lines.push("");
+  lines.push("━━━━━━━━━━━━━━━━━━━━");
+  lines.push("");
+
+  lines.push(`❌ ABSENT (${absentRolls.length})`);
+  lines.push(
+    absentRolls.length > 0
+      ? absentRolls.join(", ")
+      : "None"
+  );
+
+  lines.push("");
+  lines.push("━━━━━━━━━━━━━━━━━━━━");
+  lines.push("");
+
+  lines.push("📊 SUMMARY");
+  lines.push("");
+  lines.push(`Present : ${presentCount}`);
+  lines.push(`Absent : ${absentRecords.length}`);
+  lines.push(`Late : ${lateRecords.length}`);
+  lines.push(`Medical : ${medicalRecords.length}`);
+  lines.push(`Holiday : ${holidayRecords.length}`);
   lines.push(`Total Students : ${totalStudents}`);
-  lines.push('');
-  lines.push('Attendance :');
-  lines.push(`${percentage}%`);
-  lines.push('');
-  lines.push(SEP);
-  lines.push('');
-  lines.push('Prepared By');
-  lines.push('');
-  lines.push('Class Representative');
-  lines.push('');
-  lines.push(SEP);
+  lines.push(`Attendance : ${percentage}%`);
 
-  return lines.join('\n');
+  lines.push("");
+  lines.push("━━━━━━━━━━━━━━━━━━━━");
+  lines.push("");
+  lines.push("Prepared By");
+  lines.push("Class Representative");
+  lines.push("");
+  lines.push("━━━━━━━━━━━━━━━━━━━━");
+
+  return lines.join("\n");
 }
 
 export function generateStudentReport(
