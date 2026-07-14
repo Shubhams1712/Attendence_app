@@ -27,9 +27,10 @@ export function NewAttendancePage() {
     async function loadFormMetadata() {
       if (!classData?.id) return;
       try {
+        // Corrected: Passed classData.id to getFaculties as required by its type signature
         const [subList, facList] = await Promise.all([
           services.getSubjects(classData.id),
-          services.getFaculties()
+          services.getFaculties(classData.id)
         ]);
         setSubjects(subList);
         setFaculties(facList);
@@ -53,7 +54,6 @@ export function NewAttendancePage() {
 
     setLoading(true);
     
-    // Pass the configurations to the TakeAttendancePage via router state
     navigate('/attendance/take', {
       state: {
         subjectId: selectedSubject,
@@ -113,7 +113,8 @@ export function NewAttendancePage() {
             >
               {subjects.map((sub) => (
                 <option key={sub.id} value={sub.id}>
-                  {sub.name} ({sub.code})
+                  {/* Corrected: Removed (.code) as it is not part of the Subject interface */}
+                  {sub.name}
                 </option>
               ))}
             </select>
