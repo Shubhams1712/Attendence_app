@@ -1,121 +1,110 @@
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
-import { useForm } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
-import { z } from 'zod';
-import { motion } from 'framer-motion';
-import { Mail, Lock, ArrowRight, KeyRound } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/Button';
-import { Input } from '@/components/ui/Input';
-import toast from 'react-hot-toast';
-
-const loginSchema = z.object({
-  email: z.string().email('Please enter a valid email'),
-  password: z.string().min(6, 'Password must be at least 6 characters'),
-});
-
-type LoginForm = z.infer<typeof loginSchema>;
+import { Card } from '@/components/ui/Card';
+import { ClipboardCheck, AlertCircle, Eye, EyeOff } from 'lucide-react';
 
 export function LoginPage() {
-  const { signIn, resetPassword } = useAuth();
-  const [loading, setLoading] = useState(false);
-  const [resetSent, setResetSent] = useState(false);
+  const { signIn, loading } = useAuth();
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
-  const { register, handleSubmit, watch, formState: { errors } } = useForm<LoginForm>({
-    resolver: zodResolver(loginSchema),
-  });
-
-  const emailValue = watch('email');
-
-  const onSubmit = async (data: LoginForm) => {
-    setLoading(true);
-    const result = await signIn(data.email, data.password);
-    setLoading(false);
-
-    if (result.error) {
-      toast.error(result.error);
-    } else {
-      toast.success('Welcome back!');
-    }
-  };
-
-  const handleForgotPassword = async () => {
-    if (!emailValue) {
-      toast.error('Enter your email first');
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
+    if (!email.trim() || !password.trim()) {
+      setError('Email and password are required');
       return;
     }
-    const result = await resetPassword(emailValue);
-    if (result.error) {
-      toast.error(result.error);
-    } else {
-      setResetSent(true);
-      toast.success('Password reset email sent!');
+    setSubmitting(true);
+    try {
+      await signIn(email.trim(), password);
+    } catch (err: any) {
+      setError(err.message || 'Invalid email or password');
+    } finally {
+      setSubmitting(false);
     }
   };
 
-  return (
-    <div className="bg-white dark:bg-gray-900 rounded-3xl shadow-soft-xl p-6">
-      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.2 }}>
-        <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-1">Welcome back</h2>
-        <p className="text-sm text-gray-500 dark:text-gray-400 mb-6">
-          Sign in to manage attendance
-        </p>
-
-        <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-          <Input
-            label="Email"
-            type="email"
-            placeholder="you@example.com"
-            leftIcon={<Mail size={18} />}
-            error={errors.email?.message}
-            {...register('email')}
-          />
-
-          <Input
-            label="Password"
-            type="password"
-            placeholder="••••••••"
-            leftIcon={<Lock size={18} />}
-            error={errors.password?.message}
-            {...register('password')}
-          />
-
-          <Button
-            type="submit"
-            loading={loading}
-            fullWidth
-            icon={<ArrowRight size={18} />}
-          >
-            Sign In
-          </Button>
-        </form>
-
-        <div className="mt-6 space-y-3 text-center">
-          {resetSent ? (
-            <p className="text-sm text-success-600 font-medium">
-              ✓ Check your email for the reset link
-            </p>
-          ) : (
-            <button
-              type="button"
-              onClick={handleForgotPassword}
-              className="text-sm text-primary-600 dark:text-primary-400 hover:underline inline-flex items-center gap-1"
-            >
-              <KeyRound size={14} /> Forgot password?
-            </button>
-          )}
-          <p className="text-sm text-gray-500 dark:text-gray-400">
-            Don't have an account?{' '}
-            <Link
-              to="/register"
-              className="font-semibold text-primary-600 dark:text-primary-400 hover:underline"
-            >
-              Sign up
-            </Link>
-          </p>
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-surface-secondary flex items-center justify-center p-4">
+        <div className="animate-pulse space-y-4 text-center">
+          <div className="w-16 h-16 rounded-2xl bg-primary-200 mx-auto" />
+          <div className="h-4 w-48 bg-surface-tertiary rounded mx-auto" />
         </div>
-      </motion.div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-surface-secondary flex items-center justify-center p-4">
+      <div className="w-full max-w-sm animate-fade-in">
+        {/* Logo */}
+        <div className="text-center mb-8">
+          <div className="w-16 h-16 rounded-2xl bg-primary-600 flex items-center justify-center mx-auto mb-4 shadow-lg">
+            <ClipboardCheck className="w-8 h-8 text-white" />
+          </div>
+          <h1 className="text-2xl font-bold text-text-primary">Attendance Register</h1>
+          <p className="text-sm text-text-secondary mt-1">Sign in to continue</p>
+        </div>
+
+        <Card className="p-6">
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-text-secondary mb-1.5">Email</label>
+              <input
+                type="email"
+                value={email}
+                onChange={(e) => { setEmail(e.target.value); setError(''); }}
+                placeholder="cr@example.com"
+                autoComplete="email"
+                autoFocus
+                className="w-full px-3 py-2.5 bg-surface border border-border rounded-xl text-sm text-text-primary placeholder:text-text-tertiary focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-text-secondary mb-1.5">Password</label>
+              <div className="relative">
+                <input
+                  type={showPassword ? 'text' : 'password'}
+                  value={password}
+                  onChange={(e) => { setPassword(e.target.value); setError(''); }}
+                  placeholder="Enter your password"
+                  autoComplete="current-password"
+                  className="w-full px-3 py-2.5 pr-10 bg-surface border border-border rounded-xl text-sm text-text-primary placeholder:text-text-tertiary focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-text-tertiary hover:text-text-secondary"
+                >
+                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
+            </div>
+
+            {error && (
+              <div className="flex items-start gap-2 text-sm text-danger bg-danger-bg p-3 rounded-lg">
+                <AlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
+                <span>{error}</span>
+              </div>
+            )}
+
+            <Button type="submit" className="w-full" loading={submitting} size="lg">
+              Sign In
+            </Button>
+          </form>
+        </Card>
+
+        <p className="text-xs text-text-tertiary text-center mt-6">
+          Only authorized Class Representatives can sign in.
+        </p>
+      </div>
     </div>
   );
 }

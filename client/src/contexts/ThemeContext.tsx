@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
+import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from 'react';
 
 type Theme = 'light' | 'dark' | 'system';
 
@@ -6,6 +6,7 @@ interface ThemeContextType {
   theme: Theme;
   resolvedTheme: 'light' | 'dark';
   setTheme: (theme: Theme) => void;
+  toggleTheme: () => void;
 }
 
 const ThemeContext = createContext<ThemeContextType | null>(null);
@@ -15,43 +16,61 @@ function getSystemTheme(): 'light' | 'dark' {
   return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
 }
 
-export function ThemeProvider({ children }: { children: React.ReactNode }) {
-  const [theme, setThemeState] = useState<Theme>(() => {
-    const saved = localStorage.getItem('theme') as Theme | null;
-    return saved || 'system';
+function getStoredTheme(): Theme {
+  try {
+    const stored = localStorage.getItem('attendance-theme');
+    if (stored === 'light' || stored === 'dark' || stored === 'system') return stored;
+  } catch {}
+  return 'system';
+}
+
+export function ThemeProvider({ children }: { children: ReactNode }) {
+  const [theme, setThemeState] = useState<Theme>(getStoredTheme);
+  const [resolvedTheme, setResolvedTheme] = useState<'light' | 'dark'>(() => {
+    const t = getStoredTheme();
+    return t === 'system' ? getSystemTheme() : t;
   });
 
-  const [resolvedTheme, setResolvedTheme] = useState<'light' | 'dark'>(() =>
-    theme === 'system' ? getSystemTheme() : theme
-  );
-
-  useEffect(() => {
-    const root = document.documentElement;
-    root.classList.remove('light', 'dark');
-    root.classList.add(resolvedTheme);
-  }, [resolvedTheme]);
-
-  useEffect(() => {
-    if (theme === 'system') {
-      const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
-      const handler = (e: MediaQueryListEvent) => {
-        setResolvedTheme(e.matches ? 'dark' : 'light');
-      };
-      setResolvedTheme(getSystemTheme());
-      mediaQuery.addEventListener('change', handler);
-      return () => mediaQuery.removeEventListener('change', handler);
+  const applyTheme = useCallback((t: 'light' | 'dark') => {
+    if (t === 'dark') {
+      document.documentElement.classList.add('dark');
     } else {
-      setResolvedTheme(theme);
+      document.documentElement.classList.remove('dark');
     }
-  }, [theme]);
-
-  const setTheme = useCallback((newTheme: Theme) => {
-    setThemeState(newTheme);
-    localStorage.setItem('theme', newTheme);
+    setResolvedTheme(t);
   }, []);
 
+  const setTheme = useCallback((t: Theme) => {
+    setThemeState(t);
+    try { localStorage.setItem('attendance-theme', t); } catch {}
+    if (t === 'system') {
+      applyTheme(getSystemTheme());
+    } else {
+      applyTheme(t);
+    }
+  }, [applyTheme]);
+
+  const toggleTheme = useCallback(() => {
+    setTheme(resolvedTheme === 'dark' ? 'light' : 'dark');
+  }, [resolvedTheme, setTheme]);
+
+  useEffect(() => {
+    const mq = window.matchMedia('(prefers-color-scheme: dark)');
+    const handler = () => {
+      if (theme === 'system') applyTheme(getSystemTheme());
+    };
+    mq.addEventListener('change', handler);
+    return () => mq.removeEventListener('change', handler);
+  }, [theme, applyTheme]);
+
+  // Initialize
+  useEffect(() => {
+    const t = getStoredTheme();
+    setTheme(t);
+  }, [setTheme]);
+
   return (
-    <ThemeContext.Provider value={{ theme, resolvedTheme, setTheme }}>
+    <ThemeContext.Provider value={{ theme, resolvedTheme, setTheme, toggleTheme }}>
       {children}
     </ThemeContext.Provider>
   );

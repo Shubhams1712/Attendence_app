@@ -1,245 +1,202 @@
-import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { motion } from 'framer-motion';
-import { format } from 'date-fns';
-import {
-  Users,
-  UserCheck,
-  UserX,
-  Clock,
-  BookOpen,
-  TrendingUp,
-  Calendar,
-  Zap,
-} from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
+import { useApp } from '@/contexts/AppContext';
 import { useAuth } from '@/contexts/AuthContext';
+import * as services from '@/lib/services';
+import { formatDate, calculateStats, getCurrentAcademicYear, getCurrentSemester } from '@/lib/utils';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
-import { StatSkeleton } from '@/components/ui/Skeleton';
-import { supabase } from '@/lib/supabase';
-import { useStudents } from '@/hooks/useStudents';
-import { useTodaySessions } from '@/hooks/useSessions';
-
-interface DashboardStats {
-  totalStudents: number;
-  present: number;
-  absent: number;
-  leave: number;
-  percentage: number;
-  todaySubject: string;
-  teacherName: string;
-  lectureTime: string;
-}
-
-// Default class_id - in production this would come from user settings
-const DEFAULT_CLASS_ID = '00000000-0000-0000-0000-000000000001';
+import {
+  Users, ClipboardCheck, Clock, BarChart3, GraduationCap,
+  BookOpen, TrendingUp, Calendar, ArrowRight, UserPlus
+} from 'lucide-react';
+import type { Session } from '@/types';
 
 export function DashboardPage() {
-  const { user } = useAuth();
-  const navigate = useNavigate();
-  const [currentTime, setCurrentTime] = useState(new Date());
-  const [stats, setStats] = useState<DashboardStats | null>(null);
-
-  const { data: students = [] } = useStudents(DEFAULT_CLASS_ID);
-  const { data: todaySessions = [] } = useTodaySessions(DEFAULT_CLASS_ID);
-
-  useEffect(() => {
-    const timer = setInterval(() => setCurrentTime(new Date()), 1000);
-    return () => clearInterval(timer);
-  }, []);
+  const { classData } = useAuth();
+  const [studentsCount, setStudentsCount] = useState(0);
+  const [sessionsCount, setSessionsCount] = useState(0);
+  const [todaySessions, setTodaySessions] = useState<Session[]>([]);
+  const [overallPercentage, setOverallPercentage] = useState(0);
+  const [recentSessions, setRecentSessions] = useState<(Session & { present?: number; total?: number })[]>([]);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const loadDashboard = async () => {
-      // Get today's session info
-      const currentSession = todaySessions?.[0] as Record<string, unknown> | undefined;
-      const subjectName = (currentSession?.subjects as Record<string, unknown> | undefined)?.name as string || 'No Session';
+    if (classData?.id) loadDashboard();
+  }, [classData?.id]);
 
-      // Get attendance for current session
-      let present = 0;
-      let absent = 0;
-      let leave = 0;
+  const loadDashboard = async () => {
+    if (!classData?.id) return;
+    setLoading(true);
+    try {
+      const [count, scount, todaySess, allRecords, recent] = await Promise.all([
+        services.getStudentCount(classData.id),
+        services.getSessionCount(classData.id),
+        services.getTodaySessions(classData.id),
+        services.getAllAttendanceRecords(classData.id),
+        services.getSessions(classData.id).then(s => s.slice(0, 5)),
+      ]);
 
-      if (currentSession) {
-        const { data: records } = await supabase
-          .from('attendance_records')
-          .select('status')
-          .eq('session_id', currentSession.id);
+      setStudentsCount(count);
+      setSessionsCount(scount);
+      setTodaySessions(todaySess);
 
-        if (records) {
-          present = records.filter((r) => r.status === 'present').length;
-          absent = records.filter((r) => r.status === 'absent').length;
-          leave = records.filter((r) => r.status === 'leave').length;
-        }
+      if (allRecords.length > 0) {
+        const stats = calculateStats(allRecords.map(r => r.status));
+        const pct = Math.round(((stats.present + stats.late) / stats.total) * 100);
+        setOverallPercentage(pct);
       }
 
-      const totalStudents = students.length;
-      const percentage = totalStudents > 0 ? Math.round((present / totalStudents) * 100) : 0;
-
-      setStats({
-        totalStudents,
-        present,
-        absent,
-        leave,
-        percentage,
-        todaySubject: subjectName,
-        teacherName: user?.full_name || 'Teacher',
-        lectureTime: currentSession
-          ? `${currentSession.start_time} - ${currentSession.end_time}`
-          : 'No lecture scheduled',
+      const recentWithStats = recent.map(s => {
+        const sessionRecords = allRecords.filter(r => r.session_id === s.id);
+        const present = sessionRecords.filter(r => r.status === 'present' || r.status === 'late').length;
+        return { ...s, present, total: sessionRecords.length };
       });
-    };
-
-    if (students.length > 0) {
-      loadDashboard();
+      setRecentSessions(recentWithStats);
+    } catch (e) {
+      console.error('Failed to load dashboard:', e);
+    } finally {
+      setLoading(false);
     }
-  }, [students, todaySessions, user]);
+  };
 
-  const statCards = stats
-    ? [
-        { label: 'Present', value: stats.present, icon: UserCheck, color: 'text-success-600', bg: 'bg-success-50 dark:bg-success-500/10' },
-        { label: 'Absent', value: stats.absent, icon: UserX, color: 'text-danger-600', bg: 'bg-danger-50 dark:bg-danger-500/10' },
-        { label: 'Leave', value: stats.leave, icon: Clock, color: 'text-warning-600', bg: 'bg-warning-50 dark:bg-warning-500/10' },
-        { label: 'Total', value: stats.totalStudents, icon: Users, color: 'text-primary-600', bg: 'bg-primary-50 dark:bg-primary-500/10' },
-      ]
-    : [];
+  const quickActions = [
+    { label: 'New Attendance', icon: ClipboardCheck, to: '/attendance/new', color: 'bg-primary-500' },
+    { label: 'Students', icon: Users, to: '/students', color: 'bg-green-500' },
+    { label: 'History', icon: Clock, to: '/history', color: 'bg-amber-500' },
+    { label: 'Reports', icon: BarChart3, to: '/reports', color: 'bg-purple-500' },
+  ];
+
+  if (loading) {
+    return (
+      <div className="p-4 space-y-4 animate-pulse">
+        <div className="h-32 bg-surface rounded-2xl" />
+        <div className="grid grid-cols-2 gap-3">
+          {[1, 2, 3, 4].map(i => <div key={i} className="h-20 bg-surface rounded-xl" />)}
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <div className="page-container">
+    <div className="p-4 space-y-4 animate-fade-in">
       {/* Header */}
-      <motion.div
-        initial={{ opacity: 0, y: -10 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="mb-6"
-      >
-        <div className="flex items-center justify-between mb-1">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
-              Hello, {user?.full_name?.split(' ')[0]} 👋
-            </h1>
-            <p className="text-sm text-gray-500 dark:text-gray-400">
-              {format(currentTime, 'EEEE, MMMM d, yyyy')}
-            </p>
-          </div>
-          <div className="text-right">
-            <p className="text-lg font-bold text-primary-600 dark:text-primary-400 tabular-nums">
-              {format(currentTime, 'hh:mm:ss')}
-            </p>
-            <p className="text-xs text-gray-400">{format(currentTime, 'a')}</p>
-          </div>
+      <div className="bg-gradient-to-br from-primary-600 to-primary-800 rounded-2xl p-5 text-white">
+        <p className="text-primary-100 text-sm">{formatDate(new Date())}</p>
+        <h2 className="text-xl font-bold mt-1">Attendance Dashboard</h2>
+        <div className="flex gap-4 mt-3 text-sm text-primary-100">
+          <span>AY {getCurrentAcademicYear()}</span>
+          <span>Sem {getCurrentSemester()}</span>
         </div>
-      </motion.div>
+      </div>
 
-      {/* Today's Subject Card */}
-      {!stats ? (
-        <StatSkeleton />
-      ) : (
-        <>
-          <motion.div
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.1 }}
-          >
-            <Card className="bg-gradient-to-br from-primary-600 to-primary-800 border-0 mb-4">
-              <div className="flex items-center gap-3 mb-3">
-                <div className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center">
-                  <BookOpen size={20} className="text-white" />
-                </div>
-                <div>
-                  <p className="text-sm text-white/70">Today's Subject</p>
-                  <p className="text-lg font-bold text-white">{stats.todaySubject}</p>
-                </div>
-              </div>
-              <div className="flex items-center gap-4 text-sm text-white/80">
-                <span className="flex items-center gap-1">
-                  <Calendar size={14} />
-                  {stats.teacherName}
-                </span>
-                <span className="flex items-center gap-1">
-                  <Clock size={14} />
-                  {stats.lectureTime}
-                </span>
-              </div>
-            </Card>
-          </motion.div>
-
-          {/* Stats Grid */}
-          <div className="grid grid-cols-2 gap-3 mb-4">
-            {statCards.map((stat, i) => {
-              const Icon = stat.icon;
-              return (
-                <motion.div
-                  key={stat.label}
-                  initial={{ opacity: 0, scale: 0.95 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  transition={{ delay: 0.15 + i * 0.05 }}
-                >
-                  <Card className="flex items-center gap-3">
-                    <div className={`w-11 h-11 rounded-xl flex items-center justify-center ${stat.bg}`}>
-                      <Icon size={22} className={stat.color} />
-                    </div>
-                    <div>
-                      <p className="text-2xl font-bold text-gray-900 dark:text-white">
-                        {stat.value}
-                      </p>
-                      <p className="text-xs text-gray-500 dark:text-gray-400">{stat.label}</p>
-                    </div>
-                  </Card>
-                </motion.div>
-              );
-            })}
+      {/* Quick Stats */}
+      <div className="grid grid-cols-2 gap-3">
+        <Card className="p-4">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-primary-50 dark:bg-primary-900/20 flex items-center justify-center">
+              <Users className="w-5 h-5 text-primary-600" />
+            </div>
+            <div>
+              <p className="text-2xl font-bold text-text-primary">{studentsCount}</p>
+              <p className="text-xs text-text-tertiary">Total Students</p>
+            </div>
           </div>
+        </Card>
+        <Card className="p-4">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-green-50 dark:bg-green-900/20 flex items-center justify-center">
+              <BookOpen className="w-5 h-5 text-green-600" />
+            </div>
+            <div>
+              <p className="text-2xl font-bold text-text-primary">{sessionsCount}</p>
+              <p className="text-xs text-text-tertiary">Lectures</p>
+            </div>
+          </div>
+        </Card>
+        <Card className="p-4">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-amber-50 dark:bg-amber-900/20 flex items-center justify-center">
+              <Calendar className="w-5 h-5 text-amber-600" />
+            </div>
+            <div>
+              <p className="text-2xl font-bold text-text-primary">{todaySessions.length}</p>
+              <p className="text-xs text-text-tertiary">Today</p>
+            </div>
+          </div>
+        </Card>
+        <Card className="p-4">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-purple-50 dark:bg-purple-900/20 flex items-center justify-center">
+              <TrendingUp className="w-5 h-5 text-purple-600" />
+            </div>
+            <div>
+              <p className="text-2xl font-bold text-text-primary">{overallPercentage}%</p>
+              <p className="text-xs text-text-tertiary">Attendance</p>
+            </div>
+          </div>
+        </Card>
+      </div>
 
-          {/* Attendance Percentage */}
-          <motion.div
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.35 }}
-          >
-            <Card className="flex items-center justify-between mb-4">
-              <div className="flex items-center gap-3">
-                <div className="w-11 h-11 bg-primary-50 dark:bg-primary-500/10 rounded-xl flex items-center justify-center">
-                  <TrendingUp size={22} className="text-primary-600" />
+      {/* Quick Actions */}
+      <div>
+        <h3 className="text-sm font-semibold text-text-secondary mb-3 uppercase tracking-wider">Quick Actions</h3>
+        <div className="grid grid-cols-4 gap-2">
+          {quickActions.map(action => (
+            <Link key={action.to} to={action.to}>
+              <button className="w-full flex flex-col items-center gap-1.5 p-3 rounded-xl bg-surface border border-border hover:border-primary-200 dark:hover:border-primary-800 hover:shadow-sm transition-all active:scale-95">
+                <div className={`w-10 h-10 rounded-xl ${action.color} flex items-center justify-center`}>
+                  <action.icon className="w-5 h-5 text-white" />
                 </div>
+                <span className="text-[10px] font-medium text-text-secondary text-center leading-tight">
+                  {action.label}
+                </span>
+              </button>
+            </Link>
+          ))}
+        </div>
+      </div>
+
+      {/* Recent Attendance */}
+      <div>
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="text-sm font-semibold text-text-secondary uppercase tracking-wider">Recent Lectures</h3>
+          <Link to="/history" className="text-xs text-primary-600 font-medium flex items-center gap-1">
+            View all <ArrowRight className="w-3 h-3" />
+          </Link>
+        </div>
+        <div className="space-y-2">
+          {recentSessions.map(session => (
+            <Link key={session.id} to={`/attendance/${session.id}`}>
+              <Card hover className="p-3 flex items-center justify-between">
                 <div>
-                  <p className="text-sm text-gray-500 dark:text-gray-400">Attendance</p>
-                  <p className="text-xl font-bold text-gray-900 dark:text-white">
-                    {stats.percentage}%
+                  <p className="text-sm font-medium text-text-primary">
+                    Lecture {session.lecture_number}
+                  </p>
+                  <p className="text-xs text-text-tertiary mt-0.5">
+                    {formatDate(session.date)} • {session.time}
                   </p>
                 </div>
-              </div>
-              <div className="w-16 h-16 relative">
-                <svg className="w-16 h-16 -rotate-90" viewBox="0 0 36 36">
-                  <circle cx="18" cy="18" r="15.915" fill="none" stroke="currentColor" strokeWidth="3" className="text-gray-100 dark:text-gray-800" />
-                  <circle cx="18" cy="18" r="15.915" fill="none" stroke="currentColor" strokeWidth="3"
-                    strokeDasharray={`${stats.percentage} ${100 - stats.percentage}`}
-                    className="text-primary-600"
-                  />
-                </svg>
-                <span className="absolute inset-0 flex items-center justify-center text-xs font-bold text-primary-600">
-                  {stats.percentage}%
-                </span>
-              </div>
+                <div className="text-right">
+                  <p className="text-sm font-semibold text-green-600">
+                    {session.present ?? 0}/{session.total ?? 0}
+                  </p>
+                  <p className="text-xs text-text-tertiary">Present</p>
+                </div>
+              </Card>
+            </Link>
+          ))}
+          {recentSessions.length === 0 && (
+            <Card className="p-6 text-center">
+              <GraduationCap className="w-8 h-8 text-text-tertiary mx-auto mb-2" />
+              <p className="text-sm text-text-secondary">No lectures yet</p>
+              <Link to="/attendance/new">
+                <Button size="sm" className="mt-3">Take Attendance</Button>
+              </Link>
             </Card>
-          </motion.div>
-
-          {/* Start Attendance Button */}
-          <motion.div
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.4 }}
-          >
-            <Button
-              size="lg"
-              fullWidth
-              icon={<Zap size={22} />}
-              onClick={() => navigate('/attendance')}
-              className="text-lg h-14"
-            >
-              Start Attendance
-            </Button>
-          </motion.div>
-        </>
-      )}
+          )}
+        </div>
+      </div>
     </div>
   );
 }

@@ -1,54 +1,44 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
+import tailwindcss from '@tailwindcss/vite';
 import { VitePWA } from 'vite-plugin-pwa';
-import path from 'path';
+import { resolve } from 'path';
 
 export default defineConfig({
   plugins: [
     react(),
+    tailwindcss(),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['favicon.svg', 'apple-touch-icon.png', 'masked-icon.svg'],
+      includeAssets: ['icons/*.svg', 'favicon.svg'],
       manifest: {
-        name: 'ClassAttend - Attendance Management',
-        short_name: 'ClassAttend',
-        description: 'Fast, mobile-first classroom attendance management PWA',
-        theme_color: '#6366f1',
+        name: 'Attendance Register',
+        short_name: 'Attendance',
+        description: 'Classroom attendance management PWA',
+        theme_color: '#4f46e5',
         background_color: '#ffffff',
         display: 'standalone',
         orientation: 'portrait',
-        scope: '/',
         start_url: '/',
+        scope: '/',
         icons: [
-          {
-            src: '/icons/icon-192x192.svg',
-            sizes: '192x192',
-            type: 'image/svg+xml',
-          },
-          {
-            src: '/icons/icon-512x512.svg',
-            sizes: '512x512',
-            type: 'image/svg+xml',
-          },
-          {
-            src: '/icons/icon-512x512.svg',
-            sizes: '512x512',
-            type: 'image/svg+xml',
-            purpose: 'maskable',
-          },
+          { src: '/icons/icon-192x192.svg', sizes: '192x192', type: 'image/svg+xml', purpose: 'any' },
+          { src: '/icons/icon-512x512.svg', sizes: '512x512', type: 'image/svg+xml', purpose: 'any' },
+          { src: '/icons/icon-192x192.svg', sizes: '192x192', type: 'image/svg+xml', purpose: 'maskable' },
+          { src: '/icons/icon-512x512.svg', sizes: '512x512', type: 'image/svg+xml', purpose: 'maskable' },
         ],
       },
       workbox: {
-        globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
+        globPatterns: ['**/*.{js,css,html,svg,png,ico,woff2}'],
         runtimeCaching: [
           {
-            urlPattern: /^https:\/\/.*\.supabase\.co\/.*/i,
+            urlPattern: /^https?:\/\/.*/i,
             handler: 'NetworkFirst',
             options: {
-              cacheName: 'supabase-cache',
+              cacheName: 'attendance-cache',
               expiration: {
-                maxEntries: 100,
-                maxAgeSeconds: 60 * 60 * 24 * 7,
+                maxEntries: 200,
+                maxAgeSeconds: 30 * 24 * 60 * 60,
               },
             },
           },
@@ -58,10 +48,7 @@ export default defineConfig({
   ],
   resolve: {
     alias: {
-      '@': path.resolve(__dirname, './src'),
+      '@': resolve(__dirname, './src'),
     },
-  },
-  server: {
-    port: 5173,
   },
 });

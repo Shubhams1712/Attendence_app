@@ -1,133 +1,180 @@
-import { useState, useMemo } from 'react';
-import { motion } from 'framer-motion';
-import { Calendar, List, ChevronLeft, ChevronRight } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
+import { useAuth } from '@/contexts/AuthContext';
+import * as services from '@/lib/services';
+import { formatDate, formatTime, calculateStats } from '@/lib/utils';
 import { Card } from '@/components/ui/Card';
-import { Tabs } from '@/components/ui/Tabs';
+import { SearchInput } from '@/components/ui/SearchInput';
 import { EmptyState } from '@/components/ui/EmptyState';
-import { useSessionHistory } from '@/hooks/useSessions';
-import { format, subDays, addDays, startOfWeek, endOfWeek, eachDayOfInterval } from 'date-fns';
-import toast from 'react-hot-toast';
-import type { AttendanceSession } from '@/types';
+import { Clock, CalendarDays, ChevronDown, Filter, ArrowUpDown } from 'lucide-react';
+import type { Session, AttendanceRecord } from '@/types';
 
-const DEFAULT_CLASS_ID = '00000000-0000-0000-0000-000000000001';
+type FilterMode = 'all' | 'today' | 'week' | 'month' | 'custom';
 
 export function HistoryPage() {
-  const [viewMode, setViewMode] = useState<'calendar' | 'list'>('list');
-  const [selectedDate, setSelectedDate] = useState(new Date());
+  const { classData } = useAuth();
+  const [sessions, setSessions] = useState<(Session & { subjectName?: string; facultyName?: string; present?: number; total?: number; pct?: number })[]>([]);
+  const [search, setSearch] = useState('');
+  const [filterMode, setFilterMode] = useState<FilterMode>('all');
+  const [sortNewest, setSortNewest] = useState(true);
+  const [customStart, setCustomStart] = useState('');
+  const [customEnd, setCustomEnd] = useState('');
+  const [showFilters, setShowFilters] = useState(false);
+  const [loading, setLoading] = useState(true);
 
-  const startDate = format(startOfWeek(selectedDate, { weekStartsOn: 1 }), 'yyyy-MM-dd');
-  const endDate = format(endOfWeek(selectedDate, { weekStartsOn: 1 }), 'yyyy-MM-dd');
+  useEffect(() => {
+    if (classData?.id) loadHistory();
+  }, [classData?.id]);
 
-  const { data: history = [], isLoading } = useSessionHistory(DEFAULT_CLASS_ID, 50, 0);
+  const loadHistory = async () => {
+    if (!classData?.id) return;
+    setLoading(true);
+    try {
+      const [sess, subs, facs, allRecords] = await Promise.all([
+        services.getSessions(classData.id),
+        services.getSubjects(classData.id),
+        services.getFaculties(classData.id),
+        services.getAllAttendanceRecords(classData.id),
+      ]);
 
-  const weekStart = startOfWeek(selectedDate, { weekStartsOn: 1 });
-  const weekEnd = endOfWeek(selectedDate, { weekStartsOn: 1 });
-  const weekDays = eachDayOfInterval({ start: weekStart, end: weekEnd });
+      const recordsBySession = new Map<string, AttendanceRecord[]>();
+      for (const r of allRecords) {
+        const existing = recordsBySession.get(r.session_id) || [];
+        existing.push(r);
+        recordsBySession.set(r.session_id, existing);
+      }
 
-  // Filter sessions for the current week for calendar view
-  const weekSessions = useMemo(() => {
-    return history.filter((session) => {
-      const sessionDate = session.date;
-      return sessionDate >= startDate && sessionDate <= endDate;
-    });
-  }, [history, startDate, endDate]);
+      const enriched = sess.map(s => {
+        const records = recordsBySession.get(s.id) || [];
+        const stats = calculateStats(records.map(r => r.status));
+        return {
+          ...s,
+          subjectName: subs.find(sub => sub.id === s.subject_id)?.name || 'Unknown',
+          facultyName: facs.find(f => f.id === s.faculty_id)?.name || 'Unknown',
+          present: stats.present + stats.late,
+          total: stats.total,
+          pct: stats.total > 0 ? Math.round(((stats.present + stats.late) / stats.total) * 100) : 0,
+        };
+      });
+
+      setSessions(enriched);
+    } catch (e) {
+      console.error('Failed to load history:', e);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const now = new Date();
+  const today = now.toISOString().split('T')[0];
+  const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+  const monthAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+
+  const filtered = sessions.filter(s => {
+    const q = search.toLowerCase();
+    if (q && !s.subjectName?.toLowerCase().includes(q) && !s.facultyName?.toLowerCase().includes(q) &&
+      !String(s.lecture_number).includes(q) && !(s.date || '').includes(q)) return false;
+    if (filterMode === 'today' && s.date !== today) return false;
+    if (filterMode === 'week' && s.date < weekAgo) return false;
+    if (filterMode === 'month' && s.date < monthAgo) return false;
+    if (filterMode === 'custom') {
+      if (customStart && s.date < customStart) return false;
+      if (customEnd && s.date > customEnd) return false;
+    }
+    return true;
+  }).sort((a, b) => {
+    const comparison = (a.date || '').localeCompare(b.date || '');
+    return sortNewest ? -comparison : comparison;
+  });
+
+  if (loading) {
+    return (
+      <div className="p-4 space-y-2 animate-pulse">
+        <div className="h-10 bg-surface rounded-xl" />
+        {[1, 2, 3].map(i => <div key={i} className="h-20 bg-surface rounded-xl" />)}
+      </div>
+    );
+  }
 
   return (
-    <div className="page-container">
-      <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} className="mb-4">
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-3">Attendance History</h1>
-        <Tabs
-          tabs={[
-            { id: 'list', label: 'List', icon: <List size={14} /> },
-            { id: 'calendar', label: 'Calendar', icon: <Calendar size={14} /> },
-          ]}
-          activeTab={viewMode}
-          onChange={(id) => setViewMode(id as 'list' | 'calendar')}
-        />
-      </motion.div>
+    <div className="p-4 space-y-4 animate-fade-in">
+      <div className="flex items-center gap-2">
+        <SearchInput value={search} onChange={setSearch} placeholder="Search by subject, faculty, date..." className="flex-1" />
+        <button onClick={() => setShowFilters(!showFilters)}
+          className={`p-2.5 rounded-xl border transition-colors ${
+            showFilters || filterMode !== 'all'
+              ? 'bg-primary-50 border-primary-200 text-primary-600 dark:bg-primary-900/20 dark:border-primary-800'
+              : 'bg-surface border-border text-text-secondary hover:bg-surface-tertiary'
+          }`}>
+          <Filter className="w-4 h-4" />
+        </button>
+      </div>
 
-      {viewMode === 'calendar' && (
-        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="mb-4">
-          <Card>
-            <div className="flex items-center justify-between mb-4">
-              <button onClick={() => setSelectedDate(subDays(selectedDate, 7))} className="p-2 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-800">
-                <ChevronLeft size={20} className="text-gray-500" />
+      {showFilters && (
+        <Card className="animate-slide-down space-y-3">
+          <div className="flex gap-2 flex-wrap">
+            {(['all', 'today', 'week', 'month', 'custom'] as FilterMode[]).map(mode => (
+              <button key={mode}
+                onClick={() => setFilterMode(mode)}
+                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                  filterMode === mode
+                    ? 'bg-primary-600 text-white'
+                    : 'bg-surface-tertiary text-text-secondary hover:bg-border'
+                }`}>
+                {mode === 'all' ? 'All' : mode === 'today' ? 'Today' : mode === 'week' ? 'This Week' : mode === 'month' ? 'This Month' : 'Custom'}
               </button>
-              <p className="font-semibold text-gray-900 dark:text-white text-sm">
-                {format(weekStart, 'MMM d')} - {format(weekEnd, 'MMM d, yyyy')}
-              </p>
-              <button onClick={() => setSelectedDate(addDays(selectedDate, 7))} className="p-2 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-800">
-                <ChevronRight size={20} className="text-gray-500" />
-              </button>
-            </div>
-            <div className="grid grid-cols-7 gap-1">
-              {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((d) => (
-                <div key={d} className="text-center text-[10px] font-medium text-gray-400 py-1">{d}</div>
-              ))}
-              {weekDays.map((day) => {
-                const dateStr = format(day, 'yyyy-MM-dd');
-                const hasRecord = weekSessions.some((h) => h.date === dateStr);
-                const isToday = format(new Date(), 'yyyy-MM-dd') === dateStr;
-                return (
-                  <button
-                    key={dateStr}
-                    className={`aspect-square rounded-xl flex flex-col items-center justify-center text-sm transition-all ${
-                      isToday ? 'bg-primary-600 text-white font-bold' :
-                      hasRecord ? 'bg-success-100 dark:bg-success-500/20 text-success-700 dark:text-success-400' :
-                      'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800'
-                    }`}
-                  >
-                    {format(day, 'd')}
-                    {hasRecord && !isToday && <div className="w-1 h-1 bg-success-500 rounded-full mt-0.5" />}
-                  </button>
-                );
-              })}
-            </div>
-          </Card>
-        </motion.div>
-      )}
-
-      <div className="space-y-2">
-        {isLoading ? (
-          <div className="space-y-2">
-            {[1, 2, 3].map((i) => (
-              <div key={i} className="h-16 bg-gray-100 dark:bg-gray-800 rounded-2xl animate-pulse" />
             ))}
           </div>
-        ) : history.length === 0 ? (
-          <EmptyState
-            icon={<Calendar size={32} />}
-            title="No Records Yet"
-            description="Attendance history will appear here"
-          />
-        ) : (
-          history.map((session: AttendanceSession, i: number) => (
-            <motion.div
-              key={session.id}
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: i * 0.05 }}
-            >
-              <Card interactive onClick={() => toast.success('View details coming soon!')}>
-                <div className="flex items-center justify-between">
+          {filterMode === 'custom' && (
+            <div className="flex gap-2">
+              <input type="date" value={customStart} onChange={e => setCustomStart(e.target.value)}
+                className="flex-1 px-3 py-1.5 bg-surface border border-border rounded-lg text-xs" />
+              <input type="date" value={customEnd} onChange={e => setCustomEnd(e.target.value)}
+                className="flex-1 px-3 py-1.5 bg-surface border border-border rounded-lg text-xs" />
+            </div>
+          )}
+          <button onClick={() => setSortNewest(!sortNewest)}
+            className="flex items-center gap-1.5 text-xs text-text-secondary hover:text-text-primary transition-colors">
+            <ArrowUpDown className="w-3.5 h-3.5" />
+            {sortNewest ? 'Newest first' : 'Oldest first'}
+          </button>
+        </Card>
+      )}
+
+      {filtered.length === 0 ? (
+        <EmptyState icon={<Clock className="w-8 h-8" />} title="No attendance records" description="Take your first attendance to see it here" />
+      ) : (
+        <div className="space-y-2">
+          {filtered.map(session => (
+            <Link key={session.id} to={`/attendance/${session.id}`}>
+              <Card hover className="p-4">
+                <div className="flex items-start justify-between mb-2">
                   <div>
-                    <p className="font-semibold text-gray-900 dark:text-white text-sm">
-                      {session.start_time} - {session.end_time}
-                    </p>
-                    <p className="text-xs text-gray-500 dark:text-gray-400">
-                      {format(new Date(session.date), 'EEEE, MMM d, yyyy')}
+                    <p className="text-sm font-semibold text-text-primary">{session.subjectName}</p>
+                    <p className="text-xs text-text-tertiary mt-0.5">
+                      {formatDate(session.date)} at {session.time}
                     </p>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <span className="badge-present text-[10px]">Completed</span>
-                    <ChevronRight size={16} className="text-gray-400" />
-                  </div>
+                  <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${
+                    (session.pct ?? 0) >= 75 ? 'bg-green-50 text-green-700 dark:bg-green-900/20 dark:text-green-400' :
+                    (session.pct ?? 0) >= 50 ? 'bg-yellow-50 text-yellow-700 dark:bg-yellow-900/20 dark:text-yellow-400' :
+                    'bg-red-50 text-red-700 dark:bg-red-900/20 dark:text-red-400'
+                  }`}>
+                    {session.pct}%
+                  </span>
+                </div>
+                <div className="flex items-center gap-4 text-xs text-text-secondary">
+                  <span>{session.facultyName}</span>
+                  <span>Lec {session.lecture_number}</span>
+                  <span className="ml-auto font-medium text-text-primary">
+                    {session.present}/{session.total}
+                  </span>
                 </div>
               </Card>
-            </motion.div>
-          ))
-        )}
-      </div>
+            </Link>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

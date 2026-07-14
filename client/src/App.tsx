@@ -1,83 +1,81 @@
-import { Routes, Route, Navigate } from 'react-router-dom';
-import { useAuth } from '@/contexts/AuthContext';
-import { MainLayout } from '@/layouts/MainLayout';
-import { AuthLayout } from '@/layouts/AuthLayout';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { AuthProvider, useAuth } from '@/contexts/AuthContext';
+import { AppProvider } from '@/contexts/AppContext';
+import { ThemeProvider } from '@/contexts/ThemeContext';
+import { PINProvider } from '@/contexts/PINContext';
+import { AppLayout } from '@/components/layout/AppLayout';
 import { LoginPage } from '@/pages/LoginPage';
-import { RegisterPage } from '@/pages/RegisterPage';
+
+// Pages
 import { DashboardPage } from '@/pages/DashboardPage';
-import { AttendancePage } from '@/pages/AttendancePage';
 import { StudentsPage } from '@/pages/StudentsPage';
+import { NewAttendancePage } from '@/pages/NewAttendancePage';
+import { TakeAttendancePage } from '@/pages/TakeAttendancePage';
 import { HistoryPage } from '@/pages/HistoryPage';
+import { AttendanceDetailsPage } from '@/pages/AttendanceDetailsPage';
 import { ReportsPage } from '@/pages/ReportsPage';
-import { AnalyticsPage } from '@/pages/AnalyticsPage';
 import { SettingsPage } from '@/pages/SettingsPage';
-import { TeacherPortalPage } from '@/pages/TeacherPortalPage';
+import { SearchPage } from '@/pages/SearchPage';
 import { NotFoundPage } from '@/pages/NotFoundPage';
-import { LoadingScreen } from '@/components/ui/LoadingScreen';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
-
-  if (loading) return <LoadingScreen />;
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-surface-secondary flex items-center justify-center">
+        <div className="animate-pulse space-y-4 text-center">
+          <div className="w-12 h-12 rounded-xl bg-primary-200 mx-auto" />
+          <div className="h-3 w-32 bg-surface-tertiary rounded mx-auto" />
+        </div>
+      </div>
+    );
+  }
   if (!user) return <Navigate to="/login" replace />;
   return <>{children}</>;
 }
 
-function GuestRoute({ children }: { children: React.ReactNode }) {
-  const { user, loading } = useAuth();
+function AppRoutes() {
+  const { user } = useAuth();
 
-  if (loading) return <LoadingScreen />;
-  if (user) return <Navigate to="/dashboard" replace />;
-  return <>{children}</>;
+  return (
+    <Routes>
+      <Route path="/login" element={user ? <Navigate to="/" replace /> : <LoginPage />} />
+      <Route element={
+        <ProtectedRoute>
+          <AppLayout />
+        </ProtectedRoute>
+      }>
+        <Route path="/" element={<DashboardPage />} />
+        <Route path="/students" element={<StudentsPage />} />
+        <Route path="/attendance/new" element={<NewAttendancePage />} />
+        <Route path="/history" element={<HistoryPage />} />
+        <Route path="/attendance/:id" element={<AttendanceDetailsPage />} />
+        <Route path="/reports" element={<ReportsPage />} />
+        <Route path="/settings" element={<SettingsPage />} />
+        <Route path="/search" element={<SearchPage />} />
+        <Route path="*" element={<NotFoundPage />} />
+      </Route>
+      <Route path="/attendance/take" element={
+        <ProtectedRoute>
+          <TakeAttendancePage />
+        </ProtectedRoute>
+      } />
+    </Routes>
+  );
 }
 
 export default function App() {
   return (
-    <Routes>
-      {/* Guest Routes */}
-      <Route
-        path="/login"
-        element={
-          <GuestRoute>
-            <AuthLayout>
-              <LoginPage />
-            </AuthLayout>
-          </GuestRoute>
-        }
-      />
-      <Route
-        path="/register"
-        element={
-          <GuestRoute>
-            <AuthLayout>
-              <RegisterPage />
-            </AuthLayout>
-          </GuestRoute>
-        }
-      />
-
-      {/* Protected Routes */}
-      <Route
-        element={
-          <ProtectedRoute>
-            <MainLayout />
-          </ProtectedRoute>
-        }
-      >
-        <Route path="/dashboard" element={<DashboardPage />} />
-        <Route path="/attendance" element={<AttendancePage />} />
-        <Route path="/attendance/:sessionId" element={<AttendancePage />} />
-        <Route path="/students" element={<StudentsPage />} />
-        <Route path="/history" element={<HistoryPage />} />
-        <Route path="/reports" element={<ReportsPage />} />
-        <Route path="/analytics" element={<AnalyticsPage />} />
-        <Route path="/settings" element={<SettingsPage />} />
-        <Route path="/teacher" element={<TeacherPortalPage />} />
-      </Route>
-
-      {/* Redirects */}
-      <Route path="/" element={<Navigate to="/dashboard" replace />} />
-      <Route path="*" element={<NotFoundPage />} />
-    </Routes>
+    <ThemeProvider>
+      <BrowserRouter>
+        <AuthProvider>
+          <PINProvider>
+            <AppProvider>
+              <AppRoutes />
+            </AppProvider>
+          </PINProvider>
+        </AuthProvider>
+      </BrowserRouter>
+    </ThemeProvider>
   );
 }
