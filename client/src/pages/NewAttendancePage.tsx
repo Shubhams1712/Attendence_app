@@ -1,243 +1,201 @@
-import { useEffect, useState, useCallback, useRef } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useApp } from '@/contexts/AppContext';
 import { useAuth } from '@/contexts/AuthContext';
 import * as services from '@/lib/services';
-import { SearchInput } from '@/components/ui/SearchInput';
 import { Button } from '@/components/ui/Button';
-import { formatDate, statusColor, statusLabel } from '@/lib/utils';
-import { ArrowLeft, Check, X, Clock, Stethoscope, Sun, RotateCcw, CheckCheck } from 'lucide-react';
-import type { Student, AttendanceStatus } from '@/types';
+import { ArrowLeft, Calendar, BookOpen, User, MapPin, Hash, Layers } from 'lucide-react';
+import type { Subject, Faculty } from '@/types';
 
-const STATUS_COLORS: Record<AttendanceStatus, string> = {
-  present: 'border-l-4 border-l-green-500',
-  absent: 'border-l-4 border-l-red-500',
-  late: 'border-l-4 border-l-yellow-500',
-  medical: 'border-l-4 border-l-blue-500',
-  holiday: 'border-l-4 border-l-purple-500',
-};
-
-const STATUS_ICONS: Record<AttendanceStatus, React.ReactNode> = {
-  present: <Check className="w-5 h-5" />,
-  absent: <X className="w-5 h-5" />,
-  late: <Clock className="w-5 h-5" />,
-  medical: <Stethoscope className="w-5 h-5" />,
-  holiday: <Sun className="w-5 h-5" />,
-};
-
-export function TakeAttendancePage() {
-  const location = useLocation();
+export function NewAttendancePage() {
   const navigate = useNavigate();
-  const { createSession, saveAttendanceRecord, showToast } = useApp();
+  const { showToast } = useApp();
   const { classData } = useAuth();
-  const state = location.state as any;
 
-  const [students, setStudents] = useState<Student[]>([]);
-  const [statuses, setStatuses] = useState<Record<string, AttendanceStatus>>({});
-  const [search, setSearch] = useState('');
-  const [saving, setSaving] = useState(false);
-  const [autoSaveIndicator, setAutoSaveIndicator] = useState(false);
-  const saveTimerRef = useRef<number | null>(null);
+  const [subjects, setSubjects] = useState<Subject[]>([]);
+  const [faculties, setFaculties] = useState<Faculty[]>([]);
+  
+  const [selectedSubject, setSelectedSubject] = useState('');
+  const [selectedFaculty, setSelectedFaculty] = useState('');
+  const [classroom, setClassroom] = useState('');
+  const [lectureNumber, setLectureNumber] = useState('1');
+  const [lectureCount, setLectureCount] = useState('1');
+  const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    if (!state) { navigate('/attendance/new'); return; }
-    loadStudents();
-  }, []);
-
-  const loadStudents = async () => {
-    if (!classData?.id) return;
-    try {
-      const all = await services.getStudents(classData.id);
-      setStudents(all);
-      const initial: Record<string, AttendanceStatus> = {};
-      all.forEach(s => { initial[s.id] = 'present'; });
-      setStatuses(initial);
-    } catch (e) {
-      console.error('Failed to load students:', e);
-      showToast('Failed to load students', 'error');
-    }
-  };
-
-  const debouncedSave = useCallback((studentId: string, status: AttendanceStatus) => {
-    setAutoSaveIndicator(true);
-    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
-    saveTimerRef.current = window.setTimeout(() => setAutoSaveIndicator(false), 1500);
-  }, []);
-
-  const cycleStatus = (studentId: string) => {
-    setStatuses(prev => {
-      const current = prev[studentId] || 'present';
-      const order: AttendanceStatus[] = ['present', 'absent', 'late', 'medical', 'holiday'];
-      const nextIdx = (order.indexOf(current) + 1) % order.length;
-      const next = order[nextIdx];
-      debouncedSave(studentId, next);
-      return { ...prev, [studentId]: next };
-    });
-  };
-
-  const markAll = (status: AttendanceStatus) => {
-    const updated: Record<string, AttendanceStatus> = {};
-    students.forEach(s => { updated[s.id] = status; });
-    setStatuses(updated);
-    showToast(`All marked as ${statusLabel(status)}`, 'info');
-  };
-
-  const invertSelection = () => {
-    setStatuses(prev => {
-      const updated = { ...prev };
-      students.forEach(s => {
-        const current = updated[s.id] || 'present';
-        updated[s.id] = current === 'present' ? 'absent' : 'present';
-      });
-      return updated;
-    });
-  };
-
-  const handleFinish = async () => {
-    if (!state) return;
-    setSaving(true);
-    let lastSessionId = '';
-    const currentTimeString = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
-
-    try {
-      const lectureCount = state.lectureCount || 1;
-      
-      // Loop through each lecture requested and save sessions sequentially
-      for (let i = 0; i < lectureCount; i++) {
-        const sessionId = await createSession(
-          state.date,
-          currentTimeString,
-          state.subjectId,
-          state.facultyId,
-          state.lectureNumber + i,
-          state.classroom
-        );
+    async function loadFormMetadata() {
+      if (!classData?.id) return;
+      try {
+        const [subList, facList] = await Promise.all([
+          services.getSubjects(classData.id),
+          services.getFaculties()
+        ]);
+        setSubjects(subList);
+        setFaculties(facList);
         
-        lastSessionId = sessionId;
-
-        const promises = Object.entries(statuses).map(([studentId, status]) =>
-          saveAttendanceRecord(sessionId, studentId, status)
-        );
-
-        await Promise.all(promises);
+        if (subList.length > 0) setSelectedSubject(subList[0].id);
+        if (facList.length > 0) setSelectedFaculty(facList[0].id);
+      } catch (err) {
+        console.error('Failed to load form metadata:', err);
+        showToast('Error loading configuration details', 'error');
       }
-
-      showToast('Attendance saved successfully!', 'success');
-      navigate(`/attendance/${lastSessionId}`);
-    } catch (e: any) {
-      console.error('=== FAILED TO SAVE ATTENDANCE ===');
-      console.error('Error:', e);
-      if (e?.status) console.error('HTTP status:', e.status);
-      showToast(`Error saving attendance: ${e?.message || 'Unknown error'}`, 'error');
-    } finally {
-      setSaving(false);
     }
+    loadFormMetadata();
+  }, [classData]);
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedSubject || !selectedFaculty || !classroom) {
+      showToast('Please fill in all details', 'error');
+      return;
+    }
+
+    setLoading(true);
+    
+    // Pass the configurations to the TakeAttendancePage via router state
+    navigate('/attendance/take', {
+      state: {
+        subjectId: selectedSubject,
+        facultyId: selectedFaculty,
+        classroom: classroom.trim(),
+        lectureNumber: parseInt(lectureNumber, 10),
+        lectureCount: parseInt(lectureCount, 10),
+        date
+      }
+    });
+    setLoading(false);
   };
-
-  const filteredStudents = students.filter(s =>
-    (s.name || '').toLowerCase().includes(search.toLowerCase()) ||
-    String(s.roll_number).includes(search)
-  );
-
-  const counts = Object.values(statuses).reduce((acc: Record<string, number>, s) => {
-    acc[s] = (acc[s] || 0) + 1;
-    return acc;
-  }, {} as Record<string, number>);
-
-  if (!state) return null;
 
   return (
-    <div className="min-h-screen bg-surface-secondary animate-fade-in">
-      {/* Sticky Header */}
-      <div className="sticky top-0 z-30 bg-surface border-b border-border">
-        <div className="px-4 py-3 max-w-lg mx-auto">
-          <div className="flex items-center justify-between mb-2">
-            <button onClick={() => navigate(-1)} className="p-2 -ml-2 rounded-lg text-text-secondary hover:bg-surface-tertiary">
-              <ArrowLeft className="w-5 h-5" />
-            </button>
-            <div className="flex items-center gap-2">
-              {autoSaveIndicator && <span className="text-xs text-green-600 animate-pulse">Auto-saving...</span>}
-              <span className="text-xs text-text-tertiary bg-surface-tertiary px-2 py-1 rounded-full">
-                L{state.lectureNumber}
-              </span>
-            </div>
-          </div>
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-xs text-text-secondary">{formatDate(state.date)}</p>
-            </div>
-            <div className="flex gap-3 text-xs font-medium">
-              <span className="text-green-600">P: {counts.present || 0}</span>
-              <span className="text-red-600">A: {counts.absent || 0}</span>
-              <span className="text-yellow-600">L: {counts.late || 0}</span>
-              <span className="text-blue-600">M: {counts.medical || 0}</span>
-              <span className="text-purple-600">H: {counts.holiday || 0}</span>
-            </div>
-          </div>
+    <div className="min-h-screen bg-surface-secondary">
+      {/* Header */}
+      <div className="sticky top-0 z-30 bg-surface border-b border-border px-4 py-4">
+        <div className="max-w-md mx-auto flex items-center gap-3">
+          <button 
+            type="button" 
+            onClick={() => navigate(-1)} 
+            className="p-1 rounded-lg text-text-secondary hover:bg-surface-tertiary"
+          >
+            <ArrowLeft className="w-5 h-5" />
+          </button>
+          <h1 className="text-lg font-bold text-text-primary">New Session Details</h1>
         </div>
       </div>
 
-      {/* Quick Actions */}
-      <div className="px-4 py-2 flex gap-2 overflow-x-auto max-w-lg mx-auto">
-        <button onClick={() => markAll('present')} className="flex-shrink-0 px-3 py-1.5 text-xs font-medium rounded-lg bg-green-50 text-green-700 dark:bg-green-900/20 dark:text-green-400 hover:bg-green-100 transition-colors flex items-center gap-1">
-          <CheckCheck className="w-3.5 h-3.5" /> All Present
-        </button>
-        <button onClick={() => markAll('absent')} className="flex-shrink-0 px-3 py-1.5 text-xs font-medium rounded-lg bg-red-50 text-red-700 dark:bg-red-900/20 dark:text-red-400 hover:bg-red-100 transition-colors flex items-center gap-1">
-          <X className="w-3.5 h-3.5" /> All Absent
-        </button>
-        <button onClick={invertSelection} className="flex-shrink-0 px-3 py-1.5 text-xs font-medium rounded-lg bg-surface-tertiary text-text-secondary hover:bg-border transition-colors">
-          Invert
-        </button>
-        <button onClick={() => markAll('present')} className="flex-shrink-0 px-3 py-1.5 text-xs font-medium rounded-lg bg-surface-tertiary text-text-secondary hover:bg-border transition-colors flex items-center gap-1">
-          <RotateCcw className="w-3.5 h-3.5" /> Reset
-        </button>
-      </div>
-
-      {/* Search */}
-      <div className="px-4 py-2 max-w-lg mx-auto">
-        <SearchInput value={search} onChange={setSearch} placeholder="Search students..." />
-      </div>
-
-      {/* Student List */}
-      <div className="px-4 pb-32 max-w-lg mx-auto space-y-1">
-        {filteredStudents.map(student => {
-          const status = statuses[student.id] || 'present';
-          return (
-            <div
-              key={student.id}
-              onClick={() => cycleStatus(student.id)}
-              className={`flex items-center justify-between px-4 py-3 bg-surface rounded-xl cursor-pointer active:scale-[0.99] transition-all hover:shadow-sm ${STATUS_COLORS[status]}`}
-            >
-              <div className="flex items-center gap-3">
-                <div className="w-8 h-8 rounded-full bg-surface-tertiary flex items-center justify-center text-xs font-bold text-text-secondary">
-                  {student.roll_number}
-                </div>
-                <span className="text-sm font-medium text-text-primary">{student.name}</span>
-              </div>
-              <span className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium ${statusColor(status)}`}>
-                {STATUS_ICONS[status]}
-                {statusLabel(status)}
-              </span>
-            </div>
-          );
-        })}
-        {filteredStudents.length === 0 && (
-          <div className="text-center py-8">
-            <p className="text-sm text-text-tertiary">No students match your search</p>
+      <div className="max-w-md mx-auto p-4">
+        <form onSubmit={handleSubmit} className="space-y-4 bg-surface p-5 rounded-2xl border border-border shadow-sm">
+          
+          {/* Date Picker */}
+          <div className="space-y-1.5">
+            <label className="text-xs font-semibold text-text-secondary flex items-center gap-1.5">
+              <Calendar className="w-4 h-4 text-primary" /> Date
+            </label>
+            <input
+              type="date"
+              value={date}
+              onChange={(e) => setDate(e.target.value)}
+              className="w-full px-3.5 py-2.5 rounded-xl border border-border bg-surface text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+              required
+            />
           </div>
-        )}
-      </div>
 
-      {/* Finish Button */}
-      <div className="fixed bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-surface-secondary via-surface-secondary to-transparent max-w-lg mx-auto">
-        <Button
-          size="lg"
-          className="w-full shadow-lg"
-          onClick={handleFinish}
-          loading={saving}
-        >
-          Finish & Save Attendance
-        </Button>
+          {/* Subject Dropdown */}
+          <div className="space-y-1.5">
+            <label className="text-xs font-semibold text-text-secondary flex items-center gap-1.5">
+              <BookOpen className="w-4 h-4 text-primary" /> Subject
+            </label>
+            <select
+              value={selectedSubject}
+              onChange={(e) => setSelectedSubject(e.target.value)}
+              className="w-full px-3.5 py-2.5 rounded-xl border border-border bg-surface text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+              required
+            >
+              {subjects.map((sub) => (
+                <option key={sub.id} value={sub.id}>
+                  {sub.name} ({sub.code})
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Faculty Dropdown */}
+          <div className="space-y-1.5">
+            <label className="text-xs font-semibold text-text-secondary flex items-center gap-1.5">
+              <User className="w-4 h-4 text-primary" /> Faculty
+            </label>
+            <select
+              value={selectedFaculty}
+              onChange={(e) => setSelectedFaculty(e.target.value)}
+              className="w-full px-3.5 py-2.5 rounded-xl border border-border bg-surface text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+              required
+            >
+              {faculties.map((fac) => (
+                <option key={fac.id} value={fac.id}>
+                  {fac.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Classroom */}
+          <div className="space-y-1.5">
+            <label className="text-xs font-semibold text-text-secondary flex items-center gap-1.5">
+              <MapPin className="w-4 h-4 text-primary" /> Classroom / Lab Room
+            </label>
+            <input
+              type="text"
+              placeholder="e.g. Room 402, Lab A"
+              value={classroom}
+              onChange={(e) => setClassroom(e.target.value)}
+              className="w-full px-3.5 py-2.5 rounded-xl border border-border bg-surface text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+              required
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            {/* Lecture Number */}
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-text-secondary flex items-center gap-1.5">
+                <Hash className="w-4 h-4 text-primary" /> Lecture No.
+              </label>
+              <input
+                type="number"
+                min="1"
+                max="10"
+                value={lectureNumber}
+                onChange={(e) => setLectureNumber(e.target.value)}
+                className="w-full px-3.5 py-2.5 rounded-xl border border-border bg-surface text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                required
+              />
+            </div>
+
+            {/* Lecture Count */}
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-text-secondary flex items-center gap-1.5">
+                <Layers className="w-4 h-4 text-primary" /> Duration (Lectures)
+              </label>
+              <input
+                type="number"
+                min="1"
+                max="4"
+                value={lectureCount}
+                onChange={(e) => setLectureCount(e.target.value)}
+                className="w-full px-3.5 py-2.5 rounded-xl border border-border bg-surface text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                required
+              />
+            </div>
+          </div>
+
+          <Button
+            type="submit"
+            className="w-full !mt-6"
+            size="lg"
+            loading={loading}
+          >
+            Configure & Start Session
+          </Button>
+        </form>
       </div>
     </div>
   );
