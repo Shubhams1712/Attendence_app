@@ -97,10 +97,23 @@ export function TakeAttendancePage() {
     if (!state) return;
     setSaving(true);
     try {
-      const sessionId = await createSession(
-        state.date, new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: false }),
-        state.subjectId, state.facultyId, state.lectureNumber, state.classroom
-      );
+      for (let i = 0; i < state.lectureCount; i++) {
+
+    const sessionId = await createSession(
+        state.date,
+        time,
+        state.subjectId,
+        state.facultyId,
+        state.lectureNumber + i,
+        state.classroom
+    );
+
+    const promises = Object.entries(statuses).map(([studentId, status]) =>
+        saveAttendanceRecord(sessionId, studentId, status)
+    );
+
+    await Promise.all(promises);
+}
       const promises = Object.entries(statuses).map(([studentId, status]) =>
         saveAttendanceRecord(sessionId, studentId, status)
       );
