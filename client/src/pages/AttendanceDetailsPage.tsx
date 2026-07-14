@@ -23,6 +23,7 @@ export function AttendanceDetailsPage() {
   const [subject, setSubject] = useState<Subject | null>(null);
   const [faculty, setFaculty] = useState<Faculty | null>(null);
   const [records, setRecords] = useState<(AttendanceRecord & { student?: Student })[]>([]);
+  const [students, setStudents] = useState<Student[]>([]);
   const [stats, setStats] = useState({ total: 0, present: 0, absent: 0, late: 0, medical: 0, holiday: 0 });
   const [loading, setLoading] = useState(true);
 
@@ -46,6 +47,7 @@ export function AttendanceDetailsPage() {
       setSubject(subj || null);
       setFaculty(fac || null);
 
+      setStudents(allStudents);
       const enriched = allRecords.map(r => ({
         ...r,
         student: allStudents.find(s => s.id === r.student_id),
@@ -77,7 +79,7 @@ export function AttendanceDetailsPage() {
   const handleShare = async () => {
     if (!session) return;
     const report = generateAttendanceReport(session, subject || undefined, faculty || undefined,
-      records.map(r => r.student!).filter(Boolean), records);
+      students, records);
     const shared = await shareContent('Attendance Report', report);
     if (!shared) await copyToClipboard(report);
     showToast('Attendance report copied', 'success');
@@ -86,7 +88,7 @@ export function AttendanceDetailsPage() {
   const handleCopy = async () => {
     if (!session) return;
     const report = generateAttendanceReport(session, subject || undefined, faculty || undefined,
-      records.map(r => r.student!).filter(Boolean), records);
+      students, records);
     await copyToClipboard(report);
     showToast('Copied to clipboard', 'success');
   };
@@ -94,7 +96,7 @@ export function AttendanceDetailsPage() {
   const handleExportTxt = () => {
     if (!session) return;
     const report = generateAttendanceReport(session, subject || undefined, faculty || undefined,
-      records.map(r => r.student!).filter(Boolean), records);
+      students, records);
     downloadFile(report, `attendance-${session.lecture_number}-${session.date}.txt`, 'text/plain');
     showToast('Downloaded as TXT', 'success');
   };
@@ -164,12 +166,14 @@ export function AttendanceDetailsPage() {
       </div>
 
       {/* Actions */}
-      <div className="flex gap-2">
-        <Button size="sm" variant="secondary" icon={<Share2 className="w-4 h-4" />} onClick={handleShare}>Share</Button>
-        <Button size="sm" variant="secondary" icon={<Copy className="w-4 h-4" />} onClick={handleCopy}>Copy</Button>
-        <Button size="sm" variant="secondary" icon={<Download className="w-4 h-4" />} onClick={handleExportTxt}>TXT</Button>
-        <Button size="sm" variant="secondary" icon={<Edit3 className="w-4 h-4" />} onClick={() => requireAuth(() => showToast('Edit mode coming soon', 'info'))}>Edit</Button>
-        <Button size="sm" variant="danger" icon={<Trash2 className="w-4 h-4" />} onClick={() => requireAuth(handleDelete)}>Delete</Button>
+      <div className="scrollbar-x -mx-4 px-4">
+        <div className="flex gap-2 flex-nowrap">
+          <Button size="sm" variant="secondary" className="flex-shrink-0" icon={<Share2 className="w-4 h-4" />} onClick={handleShare}>Share</Button>
+          <Button size="sm" variant="secondary" className="flex-shrink-0" icon={<Copy className="w-4 h-4" />} onClick={handleCopy}>Copy</Button>
+          <Button size="sm" variant="secondary" className="flex-shrink-0" icon={<Download className="w-4 h-4" />} onClick={handleExportTxt}>TXT</Button>
+          <Button size="sm" variant="secondary" className="flex-shrink-0" icon={<Edit3 className="w-4 h-4" />} onClick={() => requireAuth(() => showToast('Edit mode coming soon', 'info'))}>Edit</Button>
+          <Button size="sm" variant="danger" className="flex-shrink-0" icon={<Trash2 className="w-4 h-4" />} onClick={() => requireAuth(handleDelete)}>Delete</Button>
+        </div>
       </div>
 
       {/* Student List */}

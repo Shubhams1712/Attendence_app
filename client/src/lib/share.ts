@@ -1,5 +1,11 @@
 import type { AttendanceRecord, Student, Session, Subject, Faculty } from '@/types';
-import { formatDate, calculateStats } from './utils';
+import { formatDate } from './utils';
+
+function padRoll(n: number): string {
+  return String(n).padStart(2, '0');
+}
+
+const SEP = '━━━━━━━━━━━━━━━━━━━━';
 
 export function generateAttendanceReport(
   session: Session,
@@ -8,46 +14,101 @@ export function generateAttendanceReport(
   students: Student[],
   records: AttendanceRecord[]
 ): string {
-  const stats = calculateStats(records.map(r => r.status));
-  const absentStudents = records
-    .filter(r => r.status === 'absent')
-    .map(r => {
-      const s = students.find(st => st.id === r.student_id);
-      return s ? `${s.roll_number} ${s.name}` : '';
-    })
-    .filter(Boolean);
+  const studentMap = new Map(students.map(s => [s.id, s]));
 
-  const report = [
-    '📋 Attendance Report',
-    '',
-    `Date: ${formatDate(session.date)}`,
-    `Time: ${session.time}`,
-    `Subject: ${subject?.name || 'N/A'}`,
-    `Faculty: ${faculty?.name || 'N/A'}`,
-    `Lecture: ${session.lecture_number}`,
-    `Classroom: ${session.classroom || 'N/A'}`,
-    '',
-    `Present: ${stats.present}`,
-    `Absent: ${stats.absent}`,
-    `Late: ${stats.late}`,
-    `Medical Leave: ${stats.medical}`,
-    `Holiday: ${stats.holiday}`,
-    `Total: ${stats.total}`,
-    '',
-    `Attendance: ${Math.round(((stats.present + stats.late) / stats.total) * 100)}%`,
-    '',
-  ];
+  const presentRecords = records.filter(r => r.status === 'present');
+  const absentRecords = records.filter(r => r.status === 'absent');
+  const lateRecords = records.filter(r => r.status === 'late');
+  const medicalRecords = records.filter(r => r.status === 'medical');
+  const holidayRecords = records.filter(r => r.status === 'holiday');
 
-  if (absentStudents.length > 0) {
-    report.push('Absent Students:');
-    absentStudents.forEach(s => report.push(s));
-    report.push('');
+  const totalStudents = students.length;
+  const presentCount = presentRecords.length;
+
+  const presentStudents = presentRecords
+    .map(r => studentMap.get(r.student_id))
+    .filter((s): s is Student => !!s)
+    .sort((a, b) => a.roll_number - b.roll_number);
+
+  const absentStudents = absentRecords
+    .map(r => studentMap.get(r.student_id))
+    .filter((s): s is Student => !!s)
+    .sort((a, b) => a.roll_number - b.roll_number);
+
+  const percentage = totalStudents > 0
+    ? ((presentCount / totalStudents) * 100).toFixed(2)
+    : '0';
+
+  const lines: string[] = [];
+
+  lines.push(SEP);
+  lines.push('📋 ATTENDANCE REPORT');
+  lines.push(SEP);
+  lines.push('');
+
+  lines.push(`📅 Date : ${formatDate(session.date)}`);
+  lines.push(`🕒 Time : ${session.time || 'N/A'}`);
+  lines.push('');
+  lines.push(`📚 Subject : ${subject?.name || 'N/A'}`);
+  lines.push(`👨‍🏫 Faculty : ${faculty?.name || 'N/A'}`);
+  if (session.classroom) lines.push(`🎓 Classroom : ${session.classroom}`);
+  if (session.lecture_number) lines.push(`📖 Lecture : ${session.lecture_number}`);
+  lines.push('');
+
+  lines.push(SEP);
+  lines.push('');
+
+  if (presentStudents.length > 0) {
+    lines.push(`✅ PRESENT (${presentStudents.length})`);
+    lines.push('');
+    presentStudents.forEach(s => lines.push(`${padRoll(s.roll_number)} ${s.name}`));
+    lines.push('');
+    lines.push(SEP);
+    lines.push('');
+  } else {
+    lines.push('✅ Present : None');
+    lines.push('');
+    lines.push(SEP);
+    lines.push('');
   }
 
-  report.push('Prepared By');
-  report.push('Class Representative');
+  if (absentStudents.length > 0) {
+    lines.push(`❌ ABSENT (${absentStudents.length})`);
+    lines.push('');
+    absentStudents.forEach(s => lines.push(`${padRoll(s.roll_number)} ${s.name}`));
+    lines.push('');
+    lines.push(SEP);
+    lines.push('');
+  } else {
+    lines.push('❌ Absent : None');
+    lines.push('');
+    lines.push(SEP);
+    lines.push('');
+  }
 
-  return report.join('\n');
+  lines.push('');
+  lines.push('📊 SUMMARY');
+  lines.push('');
+  lines.push(`Present  : ${presentCount}`);
+  lines.push(`Absent   : ${absentRecords.length}`);
+  lines.push(`Late     : ${lateRecords.length}`);
+  lines.push(`Medical  : ${medicalRecords.length}`);
+  lines.push(`Holiday  : ${holidayRecords.length}`);
+  lines.push('');
+  lines.push(`Total Students : ${totalStudents}`);
+  lines.push('');
+  lines.push('Attendance :');
+  lines.push(`${percentage}%`);
+  lines.push('');
+  lines.push(SEP);
+  lines.push('');
+  lines.push('Prepared By');
+  lines.push('');
+  lines.push('Class Representative');
+  lines.push('');
+  lines.push(SEP);
+
+  return lines.join('\n');
 }
 
 export function generateStudentReport(
@@ -59,23 +120,33 @@ export function generateStudentReport(
 ): string {
   const percentage = totalLectures > 0 ? Math.round(((present + late) / totalLectures) * 100) : 0;
 
-  const report = [
-    '📊 Student Attendance Report',
-    '',
-    `Name: ${student.name}`,
-    `Roll Number: ${student.roll_number}`,
-    '',
-    `Total Lectures: ${totalLectures}`,
-    `Present: ${present}`,
-    `Absent: ${absent}`,
-    `Late: ${late}`,
-    `Attendance: ${percentage}%`,
-    '',
-    'Prepared By',
-    'Class Representative',
-  ];
+  const lines: string[] = [];
 
-  return report.join('\n');
+  lines.push(SEP);
+  lines.push('📊 STUDENT ATTENDANCE REPORT');
+  lines.push(SEP);
+  lines.push('');
+  lines.push(`Name        : ${student.name}`);
+  lines.push(`Roll Number : ${padRoll(student.roll_number)}`);
+  lines.push('');
+  lines.push(SEP);
+  lines.push('');
+  lines.push(`Total Lectures : ${totalLectures}`);
+  lines.push(`Present        : ${present}`);
+  lines.push(`Absent         : ${absent}`);
+  lines.push(`Late           : ${late}`);
+  lines.push('');
+  lines.push(`Attendance : ${percentage}%`);
+  lines.push('');
+  lines.push(SEP);
+  lines.push('');
+  lines.push('Prepared By');
+  lines.push('');
+  lines.push('Class Representative');
+  lines.push('');
+  lines.push(SEP);
+
+  return lines.join('\n');
 }
 
 export function exportToCSV(headers: string[], rows: string[][]): string {
@@ -114,7 +185,6 @@ export async function copyToClipboard(text: string): Promise<boolean> {
     await navigator.clipboard.writeText(text);
     return true;
   } catch {
-    // Fallback
     const textarea = document.createElement('textarea');
     textarea.value = text;
     document.body.appendChild(textarea);

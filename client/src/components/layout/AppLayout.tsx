@@ -20,7 +20,7 @@ export function AppLayout() {
   const showTopBar = location.pathname !== '/attendance/take';
 
   return (
-    <div className="min-h-screen bg-surface-secondary max-w-lg mx-auto relative">
+    <div className="min-h-screen bg-surface-secondary max-w-lg mx-auto relative w-full overflow-x-hidden">
       {showTopBar && <TopBar title={title} />}
       <main className={showNav ? 'pb-20' : ''}>
         <Outlet />
