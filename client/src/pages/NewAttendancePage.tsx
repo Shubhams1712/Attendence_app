@@ -14,6 +14,7 @@ export function NewAttendancePage() {
   const navigate = useNavigate();
   const { showToast, addSubject, addFaculty } = useApp();
   const { classData } = useAuth();
+  const [lectureCount, setLectureCount] = useState(1);
 
   const [subjects, setSubjects] = useState<Subject[]>([]);
   const [faculty, setFaculty] = useState<Faculty[]>([]);
@@ -54,9 +55,15 @@ export function NewAttendancePage() {
   const handleStart = () => {
     if (!isValid) return;
     navigate('/attendance/take', {
-      state: { date, subjectId, facultyId, lectureNumber, classroom }
-    });
-  };
+    state: {
+        date,
+        subjectId,
+        facultyId,
+        lectureNumber,
+        lectureCount,
+        classroom
+    }
+});
 
   const handleQuickAddSubject = async () => {
     const name = prompt('Enter subject name:');
@@ -175,13 +182,24 @@ export function NewAttendancePage() {
           <label className="block text-sm font-medium text-text-secondary mb-2">
             <Hash className="w-3.5 h-3.5 inline mr-1" />
             Lecture #
+            
           </label>
           <input
             type="number"
             min={1}
             value={lectureNumber}
-            onChange={e => setLectureNumber(Math.max(1, parseInt(e.target.value) || 1))}
+            onChange={(e) => setLectureNumber(Number(e.target.value))}
             className="w-full px-3 py-2.5 bg-surface border border-border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+          />
+          <label>
+            Number of Lectures
+          </label>
+
+          <input
+            type="number"
+            min={1}
+            value={lectureCount}
+            onChange={(e)=>setLectureCount(Number(e.target.value))}
           />
         </Card>
         <Card>
