@@ -96,40 +96,37 @@ export function TakeAttendancePage() {
   const handleFinish = async () => {
     if (!state) return;
     setSaving(true);
+    let lastSessionId = '';
+    const currentTimeString = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
+
     try {
-      for (let i = 0; i < state.lectureCount; i++) {
+      const lectureCount = state.lectureCount || 1;
+      
+      // Save sessions sequentially for each lecture count step
+      for (let i = 0; i < lectureCount; i++) {
+        const sessionId = await createSession(
+          state.date,
+          currentTimeString,
+          state.subjectId,
+          state.facultyId,
+          state.lectureNumber + i,
+          state.classroom
+        );
+        
+        lastSessionId = sessionId;
 
-    const sessionId = await createSession(
-        state.date,
-        time,
-        state.subjectId,
-        state.facultyId,
-        state.lectureNumber + i,
-        state.classroom
-    );
+        const promises = Object.entries(statuses).map(([studentId, status]) =>
+          saveAttendanceRecord(sessionId, studentId, status)
+        );
 
-    const promises = Object.entries(statuses).map(([studentId, status]) =>
-        saveAttendanceRecord(sessionId, studentId, status)
-    );
+        await Promise.all(promises);
+      }
 
-    await Promise.all(promises);
-}
-      const promises = Object.entries(statuses).map(([studentId, status]) =>
-        saveAttendanceRecord(sessionId, studentId, status)
-      );
-      await Promise.all(promises);
-      showToast('Attendance saved!', 'success');
-      navigate(`/attendance/${sessionId}`);
+      showToast('Attendance saved successfully!', 'success');
+      navigate(`/attendance/${lastSessionId}`);
     } catch (e: any) {
       console.error('=== FAILED TO SAVE ATTENDANCE ===');
       console.error('Error:', e);
-      console.error('Error message:', e?.message);
-      console.error('Error code:', e?.code);
-      console.error('Error details:', e?.details);
-      console.error('Error hint:', e?.hint);
-      if (e?.status) console.error('HTTP status:', e.status);
-      if (e?.statusText) console.error('HTTP status text:', e.statusText);
-      try { console.error('Full serialized error:', JSON.stringify(e, Object.getOwnPropertyNames(e))); } catch (_) {}
       showToast(`Error saving attendance: ${e?.message || 'Unknown error'}`, 'error');
     } finally {
       setSaving(false);
