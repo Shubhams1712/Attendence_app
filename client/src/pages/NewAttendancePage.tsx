@@ -1,257 +1,244 @@
-import { useEffect, useState, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useEffect, useState, useCallback, useRef } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { useApp } from '@/contexts/AppContext';
 import { useAuth } from '@/contexts/AuthContext';
 import * as services from '@/lib/services';
-import { Card } from '@/components/ui/Card';
-import { Button } from '@/components/ui/Button';
 import { SearchInput } from '@/components/ui/SearchInput';
-import { getTodayDateString } from '@/lib/utils';
-import { BookOpen, UserCheck, Hash, MapPin, Play } from 'lucide-react';
-import type { Subject, Faculty } from '@/types';
+import { Button } from '@/components/ui/Button';
+import { formatDate, statusColor, statusLabel } from '@/lib/utils';
+import { ArrowLeft, Check, X, Clock, Stethoscope, Sun, RotateCcw, CheckCheck } from 'lucide-react';
+import type { Student, AttendanceStatus } from '@/types';
 
-export function NewAttendancePage() {
+const STATUS_COLORS: Record<AttendanceStatus, string> = {
+  present: 'border-l-4 border-l-green-500',
+  absent: 'border-l-4 border-l-red-500',
+  late: 'border-l-4 border-l-yellow-500',
+  medical: 'border-l-4 border-l-blue-500',
+  holiday: 'border-l-4 border-l-purple-500',
+};
+
+const STATUS_ICONS: Record<AttendanceStatus, React.ReactNode> = {
+  present: <Check className="w-5 h-5" />,
+  absent: <X className="w-5 h-5" />,
+  late: <Clock className="w-5 h-5" />,
+  medical: <Stethoscope className="w-5 h-5" />,
+  holiday: <Sun className="w-5 h-5" />,
+};
+
+export function TakeAttendancePage() {
+  const location = useLocation();
   const navigate = useNavigate();
-  const { showToast, addSubject, addFaculty } = useApp();
+  const { createSession, saveAttendanceRecord, showToast } = useApp();
   const { classData } = useAuth();
+  const state = location.state as any;
 
-  const [subjects, setSubjects] = useState<Subject[]>([]);
-  const [faculty, setFaculty] = useState<Faculty[]>([]);
-  const [date, setDate] = useState(getTodayDateString());
-  const [subjectId, setSubjectId] = useState<string | null>(null);
-  const [facultyId, setFacultyId] = useState<string | null>(null);
-  const [lectureNumber, setLectureNumber] = useState<number | ''>(1);
-  const [lectureCount, setLectureCount] = useState<number | ''>(1);
-  const [classroom, setClassroom] = useState('');
-  const [searchSubject, setSearchSubject] = useState('');
+  const [students, setStudents] = useState<Student[]>([]);
+  const [statuses, setStatuses] = useState<Record<string, AttendanceStatus>>({});
+  const [search, setSearch] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [autoSaveIndicator, setAutoSaveIndicator] = useState(false);
+  const saveTimerRef = useRef<number | null>(null);
 
   useEffect(() => {
-    if (classData?.id) loadData();
-  }, [classData?.id]);
+    if (!state) { navigate('/attendance/new'); return; }
+    loadStudents();
+  }, []);
 
-  const loadData = async () => {
+  const loadStudents = async () => {
     if (!classData?.id) return;
     try {
-      const [subs, facs, nextLN] = await Promise.all([
-        services.getSubjects(classData.id),
-        services.getFaculties(classData.id),
-        services.getNextLectureNumber(classData.id),
-      ]);
-      setSubjects(subs);
-      setFaculty(facs);
-      setLectureNumber(nextLN);
+      const all = await services.getStudents(classData.id);
+      setStudents(all);
+      const initial: Record<string, AttendanceStatus> = {};
+      all.forEach(s => { initial[s.id] = 'present'; });
+      setStatuses(initial);
     } catch (e) {
-      console.error('Failed to load data:', e);
-      showToast('Failed to load data', 'error');
+      console.error('Failed to load students:', e);
+      showToast('Failed to load students', 'error');
     }
   };
 
-  const filteredSubjects = useMemo(() => {
-    return subjects.filter(s =>
-      (s.name || '').toLowerCase().includes(searchSubject.toLowerCase())
-    );
-  }, [subjects, searchSubject]);
+  const debouncedSave = useCallback((studentId: string, status: AttendanceStatus) => {
+    setAutoSaveIndicator(true);
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    saveTimerRef.current = window.setTimeout(() => setAutoSaveIndicator(false), 1500);
+  }, []);
 
-  const isValid = date && subjectId && facultyId;
-
-  const handleStart = () => {
-    if (!isValid) return;
-
-    navigate('/attendance/take', {
-      state: {
-        date,
-        subjectId,
-        facultyId,
-        lectureNumber: lectureNumber || 1,
-        lectureCount: lectureCount || 1,
-        classroom,
-      },
+  const cycleStatus = (studentId: string) => {
+    setStatuses(prev => {
+      const current = prev[studentId] || 'present';
+      const order: AttendanceStatus[] = ['present', 'absent', 'late', 'medical', 'holiday'];
+      const nextIdx = (order.indexOf(current) + 1) % order.length;
+      const next = order[nextIdx];
+      debouncedSave(studentId, next);
+      return { ...prev, [studentId]: next };
     });
   };
 
-  const handleQuickAddSubject = async () => {
-    const name = prompt('Enter subject name:');
-    if (name?.trim()) {
-      try {
-        await addSubject(name.trim());
-        if (classData?.id) {
-          const subs = await services.getSubjects(classData.id);
-          setSubjects(subs);
-        }
-      } catch (e) {
-        console.error('Failed to add subject:', e);
-        showToast('Failed to add subject', 'error');
+  const markAll = (status: AttendanceStatus) => {
+    const updated: Record<string, AttendanceStatus> = {};
+    students.forEach(s => { updated[s.id] = status; });
+    setStatuses(updated);
+    showToast(`All marked as ${statusLabel(status)}`, 'info');
+  };
+
+  const invertSelection = () => {
+    setStatuses(prev => {
+      const updated = { ...prev };
+      students.forEach(s => {
+        const current = updated[s.id] || 'present';
+        updated[s.id] = current === 'present' ? 'absent' : 'present';
+      });
+      return updated;
+    });
+  };
+
+  const handleFinish = async () => {
+    if (!state) return;
+    setSaving(true);
+    let lastSessionId = '';
+    const currentTimeString = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
+
+    try {
+      const lectureCount = state.lectureCount || 1;
+      
+      // Loop through each lecture requested and save sessions sequentially
+      for (let i = 0; i < lectureCount; i++) {
+        const sessionId = await createSession(
+          state.date,
+          currentTimeString,
+          state.subjectId,
+          state.facultyId,
+          state.lectureNumber + i,
+          state.classroom
+        );
+        
+        lastSessionId = sessionId;
+
+        const promises = Object.entries(statuses).map(([studentId, status]) =>
+          saveAttendanceRecord(sessionId, studentId, status)
+        );
+
+        await Promise.all(promises);
       }
+
+      showToast('Attendance saved successfully!', 'success');
+      navigate(`/attendance/${lastSessionId}`);
+    } catch (e: any) {
+      console.error('=== FAILED TO SAVE ATTENDANCE ===');
+      console.error('Error:', e);
+      if (e?.status) console.error('HTTP status:', e.status);
+      showToast(`Error saving attendance: ${e?.message || 'Unknown error'}`, 'error');
+    } finally {
+      setSaving(false);
     }
   };
 
-  const handleQuickAddFaculty = async () => {
-    const name = prompt('Enter faculty name:');
-    if (name?.trim()) {
-      try {
-        await addFaculty(name.trim());
-        if (classData?.id) {
-          const facs = await services.getFaculties(classData.id);
-          setFaculty(facs);
-        }
-      } catch (e) {
-        console.error('Failed to add faculty:', e);
-        showToast('Failed to add faculty', 'error');
-      }
-    }
-  };
+  const filteredStudents = students.filter(s =>
+    (s.name || '').toLowerCase().includes(search.toLowerCase()) ||
+    String(s.roll_number).includes(search)
+  );
+
+  const counts = Object.values(statuses).reduce((acc: Record<string, number>, s) => {
+    acc[s] = (acc[s] || 0) + 1;
+    return acc;
+  }, {} as Record<string, number>);
+
+  if (!state) return null;
 
   return (
-    <div className="p-4 space-y-4 animate-fade-in">
-      {/* Date */}
-      <Card>
-        <label className="block text-sm font-medium text-text-secondary mb-2">Date</label>
-        <input
-          type="date"
-          value={date}
-          onChange={e => setDate(e.target.value)}
-          className="w-full px-3 py-2.5 bg-surface border border-border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
-        />
-      </Card>
-
-      {/* Subject */}
-      <Card>
-        <div className="flex items-center justify-between mb-2">
-          <label className="text-sm font-medium text-text-secondary">Subject</label>
-          <button 
-            type="button" 
-            onClick={handleQuickAddSubject} 
-            className="text-xs text-primary-600 font-medium hover:underline focus:outline-none"
-          >
-            + Add Subject
-          </button>
-        </div>
-        <SearchInput
-          value={searchSubject}
-          onChange={setSearchSubject}
-          placeholder="Search subjects..."
-          className="mb-2"
-        />
-        <div className="max-h-40 overflow-y-auto space-y-1">
-          {filteredSubjects.map(subject => (
-            <button
-              key={subject.id}
-              type="button"
-              onClick={() => setSubjectId(subject.id)}
-              className={`w-full text-left px-3 py-2.5 rounded-lg text-sm transition-colors flex items-center gap-2 ${
-                subjectId === subject.id
-                  ? 'bg-primary-50 text-primary-700 dark:bg-primary-900/20 dark:text-primary-400 font-medium'
-                  : 'text-text-secondary hover:bg-surface-tertiary'
-              }`}
-            >
-              <BookOpen className="w-4 h-4" />
-              {subject.name}
+    <div className="min-h-screen bg-surface-secondary animate-fade-in">
+      {/* Sticky Header */}
+      <div className="sticky top-0 z-30 bg-surface border-b border-border">
+        <div className="px-4 py-3 max-w-lg mx-auto">
+          <div className="flex items-center justify-between mb-2">
+            <button onClick={() => navigate(-1)} className="p-2 -ml-2 rounded-lg text-text-secondary hover:bg-surface-tertiary">
+              <ArrowLeft className="w-5 h-5" />
             </button>
-          ))}
-          {filteredSubjects.length === 0 && (
-            <p className="text-xs text-text-tertiary text-center py-2">
-              {searchSubject ? 'No matching subjects' : 'No subjects yet'}
-            </p>
-          )}
-        </div>
-      </Card>
-
-      {/* Faculty */}
-      <Card>
-        <div className="flex items-center justify-between mb-2">
-          <label className="text-sm font-medium text-text-secondary">Faculty</label>
-          <button 
-            type="button" 
-            onClick={handleQuickAddFaculty} 
-            className="text-xs text-primary-600 font-medium hover:underline focus:outline-none"
-          >
-            + Add Faculty
-          </button>
-        </div>
-        <div className="max-h-32 overflow-y-auto space-y-1">
-          {faculty.map(f => (
-            <button
-              key={f.id}
-              type="button"
-              onClick={() => setFacultyId(f.id)}
-              className={`w-full text-left px-3 py-2.5 rounded-lg text-sm transition-colors flex items-center gap-2 ${
-                facultyId === f.id
-                  ? 'bg-primary-50 text-primary-700 dark:bg-primary-900/20 dark:text-primary-400 font-medium'
-                  : 'text-text-secondary hover:bg-surface-tertiary'
-              }`}
-            >
-              <UserCheck className="w-4 h-4" />
-              {f.name}
-            </button>
-          ))}
-          {faculty.length === 0 && (
-            <p className="text-xs text-text-tertiary text-center py-2">No faculty yet</p>
-          )}
-        </div>
-      </Card>
-
-      {/* Lecture Number & Classroom */}
-      <div className="grid grid-cols-2 gap-3">
-        <Card className="space-y-3">
-          <div>
-            <label className="block text-sm font-medium text-text-secondary mb-2">
-              <Hash className="w-3.5 h-3.5 inline mr-1" />
-              Lecture #
-            </label>
-            <input
-              type="number"
-              min={1}
-              value={lectureNumber}
-              onChange={(e) => setLectureNumber(e.target.value === '' ? '' : Number(e.target.value))}
-              className="w-full px-3 py-2.5 bg-surface border border-border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
-            />
+            <div className="flex items-center gap-2">
+              {autoSaveIndicator && <span className="text-xs text-green-600 animate-pulse">Auto-saving...</span>}
+              <span className="text-xs text-text-tertiary bg-surface-tertiary px-2 py-1 rounded-full">
+                L{state.lectureNumber}
+              </span>
+            </div>
           </div>
-          
-          <div>
-            <label className="block text-sm font-medium text-text-secondary mb-2">
-              <Hash className="w-3.5 h-3.5 inline mr-1" />
-              Number of Lectures
-            </label>
-            <input
-              type="number"
-              min={1}
-              value={lectureCount}
-              onChange={(e) => setLectureCount(e.target.value === '' ? '' : Number(e.target.value))}
-              className="w-full px-3 py-2.5 bg-surface border border-border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
-            />
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-xs text-text-secondary">{formatDate(state.date)}</p>
+            </div>
+            <div className="flex gap-3 text-xs font-medium">
+              <span className="text-green-600">P: {counts.present || 0}</span>
+              <span className="text-red-600">A: {counts.absent || 0}</span>
+              <span className="text-yellow-600">L: {counts.late || 0}</span>
+              <span className="text-blue-600">M: {counts.medical || 0}</span>
+              <span className="text-purple-600">H: {counts.holiday || 0}</span>
+            </div>
           </div>
-        </Card>
-        
-        <Card>
-          <label className="block text-sm font-medium text-text-secondary mb-2">
-            <MapPin className="w-3.5 h-3.5 inline mr-1" />
-            Classroom
-          </label> 
-          <input
-            type="text"
-            value={classroom}
-            onChange={e => setClassroom(e.target.value)}
-            placeholder="Optional"
-            className="w-full px-3 py-2.5 bg-surface border border-border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
-          />
-        </Card>
+        </div>
       </div>
 
-      <Button
-        size="lg"
-        className="w-full"
-        disabled={!isValid}
-        onClick={handleStart}
-        icon={<Play className="w-5 h-5" />}
-      >
-        Start Attendance
-      </Button>
+      {/* Quick Actions */}
+      <div className="px-4 py-2 flex gap-2 overflow-x-auto max-w-lg mx-auto">
+        <button onClick={() => markAll('present')} className="flex-shrink-0 px-3 py-1.5 text-xs font-medium rounded-lg bg-green-50 text-green-700 dark:bg-green-900/20 dark:text-green-400 hover:bg-green-100 transition-colors flex items-center gap-1">
+          <CheckCheck className="w-3.5 h-3.5" /> All Present
+        </button>
+        <button onClick={() => markAll('absent')} className="flex-shrink-0 px-3 py-1.5 text-xs font-medium rounded-lg bg-red-50 text-red-700 dark:bg-red-900/20 dark:text-red-400 hover:bg-red-100 transition-colors flex items-center gap-1">
+          <X className="w-3.5 h-3.5" /> All Absent
+        </button>
+        <button onClick={invertSelection} className="flex-shrink-0 px-3 py-1.5 text-xs font-medium rounded-lg bg-surface-tertiary text-text-secondary hover:bg-border transition-colors">
+          Invert
+        </button>
+        <button onClick={() => markAll('present')} className="flex-shrink-0 px-3 py-1.5 text-xs font-medium rounded-lg bg-surface-tertiary text-text-secondary hover:bg-border transition-colors flex items-center gap-1">
+          <RotateCcw className="w-3.5 h-3.5" /> Reset
+        </button>
+      </div>
 
-      {(!subjects.length || !faculty.length) && (
-        <p className="text-xs text-text-tertiary text-center">
-          You need at least one subject and faculty member to start.
-        </p>
-      )}
+      {/* Search */}
+      <div className="px-4 py-2 max-w-lg mx-auto">
+        <SearchInput value={search} onChange={setSearch} placeholder="Search students..." />
+      </div>
+
+      {/* Student List */}
+      <div className="px-4 pb-32 max-w-lg mx-auto space-y-1">
+        {filteredStudents.map(student => {
+          const status = statuses[student.id] || 'present';
+          return (
+            <div
+              key={student.id}
+              onClick={() => cycleStatus(student.id)}
+              className={`flex items-center justify-between px-4 py-3 bg-surface rounded-xl cursor-pointer active:scale-[0.99] transition-all hover:shadow-sm ${STATUS_COLORS[status]}`}
+            >
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 rounded-full bg-surface-tertiary flex items-center justify-center text-xs font-bold text-text-secondary">
+                  {student.roll_number}
+                </div>
+                <span className="text-sm font-medium text-text-primary">{student.name}</span>
+              </div>
+              <span className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium ${statusColor(status)}`}>
+                {STATUS_ICONS[status]}
+                {statusLabel(status)}
+              </span>
+            </div>
+          );
+        })}
+        {filteredStudents.length === 0 && (
+          <div className="text-center py-8">
+            <p className="text-sm text-text-tertiary">No students match your search</p>
+          </div>
+        )}
+      </div>
+
+      {/* Finish Button */}
+      <div className="fixed bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-surface-secondary via-surface-secondary to-transparent max-w-lg mx-auto">
+        <Button
+          size="lg"
+          className="w-full shadow-lg"
+          onClick={handleFinish}
+          loading={saving}
+        >
+          Finish & Save Attendance
+        </Button>
+      </div>
     </div>
   );
 }
