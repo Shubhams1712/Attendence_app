@@ -10,7 +10,7 @@ const SEP = '━━━━━━━━━━━━━━━━━━━━';
 export function generateAttendanceReport(
   session: Session,
   subject: Subject | undefined,
-  faculty: Faculty |undefined,
+  faculty: Faculty | undefined,
   students: Student[],
   records: AttendanceRecord[]
 ): string {
@@ -40,69 +40,53 @@ export function generateAttendanceReport(
   const percentage =
     totalStudents > 0
       ? ((presentCount / totalStudents) * 100).toFixed(2)
-      : '0.00';
+      : "0.00";
 
   const lines: string[] = [];
 
-  lines.push("━━━━━━━━━━━━━━━━━━━━");
   lines.push("📋 ATTENDANCE REPORT");
-  lines.push("━━━━━━━━━━━━━━━━━━━━");
   lines.push("");
 
-  lines.push(`📅 Date : ${formatDate(session.date)}`);
-  lines.push(`🕒 Time : ${session.time || "N/A"}`);
-  lines.push(`📚 Subject : ${subject?.name || "N/A"}`);
-  lines.push(`👨‍🏫 Faculty : ${faculty?.name || "N/A"}`);
-
-  if (session.classroom)
-    lines.push(`🎓 Classroom : ${session.classroom}`);
-
-  if (session.lecture_number)
-    lines.push(`📖 Lecture : ${session.lecture_number}`);
-
-  lines.push("");
-  lines.push("━━━━━━━━━━━━━━━━━━━━");
-  lines.push("");
-
-  lines.push(`✅ PRESENT (${presentRolls.length})`);
   lines.push(
-    presentRolls.length > 0
+    `📅 ${formatDate(session.date)} | 🕒 ${session.time || "N/A"}`
+  );
+
+  lines.push(
+    `📚 ${subject?.name || "N/A"} | 👨‍🏫 ${faculty?.name || "N/A"} | L-${session.lecture_number ?? "-"}`
+  );
+
+  if (session.classroom) {
+    lines.push(`🏫 ${session.classroom}`);
+  }
+
+  lines.push("");
+
+  lines.push(`👥 Total : ${totalStudents}`);
+  lines.push(`✅ Present : ${presentCount}`);
+  lines.push(`❌ Absent : ${absentRecords.length}`);
+  lines.push(`📊 Attendance : ${percentage}%`);
+
+  lines.push("");
+
+  lines.push("✅ Present Roll Nos.");
+  lines.push(
+    presentRolls.length
       ? presentRolls.join(", ")
       : "None"
   );
 
   lines.push("");
-  lines.push("━━━━━━━━━━━━━━━━━━━━");
-  lines.push("");
 
-  lines.push(`❌ ABSENT (${absentRolls.length})`);
+  lines.push("❌ Absent Roll Nos.");
   lines.push(
-    absentRolls.length > 0
+    absentRolls.length
       ? absentRolls.join(", ")
       : "None"
   );
 
   lines.push("");
-  lines.push("━━━━━━━━━━━━━━━━━━━━");
-  lines.push("");
 
-  lines.push("📊 SUMMARY");
-  lines.push("");
-  lines.push(`Present : ${presentCount}`);
-  lines.push(`Absent : ${absentRecords.length}`);
-  lines.push(`Late : ${lateRecords.length}`);
-  lines.push(`Medical : ${medicalRecords.length}`);
-  lines.push(`Holiday : ${holidayRecords.length}`);
-  lines.push(`Total Students : ${totalStudents}`);
-  lines.push(`Attendance : ${percentage}%`);
-
-  lines.push("");
-  lines.push("━━━━━━━━━━━━━━━━━━━━");
-  lines.push("");
-  lines.push("Prepared By");
-  lines.push("Class Representative");
-  lines.push("");
-  lines.push("━━━━━━━━━━━━━━━━━━━━");
+  lines.push("— Class Representative");
 
   return lines.join("\n");
 }
